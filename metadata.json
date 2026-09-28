@@ -1,0 +1,6 @@
+{
+  "name": "Lumix Studio - Offline PWA Photo Editor",
+  "description": "Trình chỉnh sửa ảnh PWA offline chuyên nghiệp, bảo mật cao: Crop, xoay, bộ lọc màu, curves, chỉnh màu nâng cao, thêm chữ tiếng Việt, ghép ảnh collage và vẽ tự do trên mọi thiết bị.",
+  "requestFramePermissions": [],
+  "majorCapabilities": ["MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"]
+}
