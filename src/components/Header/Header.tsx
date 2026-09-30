@@ -10,6 +10,7 @@ import {
   FolderOpen,
   Share,
   Eye,
+  Camera,
   SlidersHorizontal,
 } from 'lucide-react';
 import { useEditorStore } from '../../stores/editorStore';
@@ -18,9 +19,10 @@ import { PWAInstallButton } from '../PWA/PWAInstallButton';
 interface HeaderProps {
   onOpenProjects: () => void;
   onOpenExport: () => void;
+  onOpenCamera?: () => void;
 }
 
-export const Header: React.FC<HeaderProps> = ({ onOpenProjects, onOpenExport }) => {
+export const Header: React.FC<HeaderProps> = ({ onOpenProjects, onOpenExport, onOpenCamera }) => {
   const {
     projectName,
     setProjectName,
@@ -90,6 +92,18 @@ export const Header: React.FC<HeaderProps> = ({ onOpenProjects, onOpenExport }) 
             </button>
           )}
         </div>
+
+        {/* Quick Camera Open Button */}
+        {onOpenCamera && (
+          <button
+            onClick={onOpenCamera}
+            className="flex items-center gap-1.5 px-2.5 py-1.5 rounded-xl bg-gradient-to-r from-pink-500 to-rose-500 hover:from-pink-600 hover:to-rose-600 text-white font-semibold text-xs shadow-md shadow-pink-500/20 active:scale-95 transition shrink-0"
+            title="Mở Camera chụp ảnh đẹp"
+          >
+            <Camera className="w-3.5 h-3.5" />
+            <span className="hidden sm:inline">Chụp ảnh</span>
+          </button>
+        )}
       </div>
 
       {/* Center: Undo, Redo, Before/After & Zoom */}

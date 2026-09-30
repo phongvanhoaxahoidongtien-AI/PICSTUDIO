@@ -9,18 +9,22 @@ import {
   Smile,
   Layers as LayersIcon,
   ImagePlus,
+  Heart,
+  Camera,
 } from 'lucide-react';
 import { useEditorStore } from '../../stores/editorStore';
 import type { ToolType } from '../../types';
 
 interface BottomNavProps {
   onOpenFilePicker: () => void;
+  onOpenCamera?: () => void;
 }
 
-export const BottomNav: React.FC<BottomNavProps> = ({ onOpenFilePicker }) => {
+export const BottomNav: React.FC<BottomNavProps> = ({ onOpenFilePicker, onOpenCamera }) => {
   const { activeTool, setActiveTool } = useEditorStore();
 
   const tools: { id: ToolType; label: string; icon: React.ReactNode }[] = [
+    { id: 'beauty', label: 'Làm đẹp', icon: <Heart className="w-5 h-5 text-pink-400" /> },
     { id: 'adjust', label: 'Chỉnh màu', icon: <Sliders className="w-5 h-5" /> },
     { id: 'filters', label: 'Bộ lọc', icon: <Sparkles className="w-5 h-5" /> },
     { id: 'crop', label: 'Cắt / Xoay', icon: <Crop className="w-5 h-5" /> },
@@ -34,6 +38,20 @@ export const BottomNav: React.FC<BottomNavProps> = ({ onOpenFilePicker }) => {
   return (
     <nav className="h-16 bg-slate-900/95 dark:bg-slate-950/95 backdrop-blur-md border-t border-slate-800 px-2 flex items-center justify-between z-30 select-none pb-safe">
       <div className="flex items-center gap-1 sm:gap-2 overflow-x-auto w-full justify-start sm:justify-center py-1 scrollbar-none">
+        {/* Quick Camera Capture Button */}
+        {onOpenCamera && (
+          <button
+            onClick={onOpenCamera}
+            className="flex flex-col items-center justify-center min-w-[56px] py-1 px-1.5 rounded-xl text-pink-400 hover:text-pink-300 hover:bg-pink-950/30 transition shrink-0 active:scale-95"
+            title="Mở Camera chụp ảnh đẹp"
+          >
+            <div className="p-1 rounded-lg bg-pink-500/20 text-pink-400 shadow-sm shadow-pink-500/30">
+              <Camera className="w-4 h-4" />
+            </div>
+            <span className="text-[10px] font-semibold mt-0.5">Chụp ảnh</span>
+          </button>
+        )}
+
         {/* Quick Add Photo Button */}
         <button
           onClick={onOpenFilePicker}
@@ -51,13 +69,16 @@ export const BottomNav: React.FC<BottomNavProps> = ({ onOpenFilePicker }) => {
         {/* Editing Tool Tabs */}
         {tools.map((t) => {
           const isActive = activeTool === t.id;
+          const isBeauty = t.id === 'beauty';
           return (
             <button
               key={t.id}
               onClick={() => setActiveTool(isActive ? 'none' : t.id)}
               className={`flex flex-col items-center justify-center min-w-[58px] sm:min-w-[68px] py-1 px-1.5 rounded-xl transition shrink-0 active:scale-95 ${
                 isActive
-                  ? 'bg-indigo-600/20 text-indigo-400 border border-indigo-500/40 font-semibold'
+                  ? isBeauty
+                    ? 'bg-pink-600/25 text-pink-400 border border-pink-500/40 font-semibold'
+                    : 'bg-indigo-600/20 text-indigo-400 border border-indigo-500/40 font-semibold'
                   : 'text-slate-400 hover:text-slate-200 hover:bg-slate-800/50'
               }`}
             >

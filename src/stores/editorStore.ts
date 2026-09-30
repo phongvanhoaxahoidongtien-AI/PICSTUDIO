@@ -7,10 +7,12 @@ import type {
   StickerLayer,
   ToolType,
   ImageAdjustments,
+  BeautySettings,
   CollageConfig,
   ProjectData,
 } from '../types';
 import { DEFAULT_ADJUSTMENTS } from '../utils/imageProcessing';
+import { DEFAULT_BEAUTY_SETTINGS } from '../utils/beautyProcessing';
 
 interface HistorySnapshot {
   layers: CanvasLayer[];
@@ -19,7 +21,13 @@ interface HistorySnapshot {
   backgroundColor: string;
 }
 
+export type AppMode = 'editor' | 'camera';
+
 interface EditorState {
+  // App Mode (Editor vs Camera)
+  appMode: AppMode;
+  setAppMode: (mode: AppMode) => void;
+
   // Tool & Navigation
   activeTool: ToolType;
   setActiveTool: (tool: ToolType) => void;
@@ -57,6 +65,8 @@ interface EditorState {
   // Specific Layer Updaters
   updateActiveImageAdjustments: (adjustments: Partial<ImageAdjustments>) => void;
   resetActiveImageAdjustments: () => void;
+  updateActiveImageBeauty: (beauty: Partial<BeautySettings>) => void;
+  resetActiveImageBeauty: () => void;
   updateActiveImageFilter: (filterId: string, intensity?: number) => void;
   updateActiveText: (updates: Partial<TextLayer>) => void;
 
@@ -93,6 +103,9 @@ interface EditorState {
 }
 
 export const useEditorStore = create<EditorState>((set, get) => ({
+  appMode: 'editor',
+  setAppMode: (mode) => set({ appMode: mode }),
+
   activeTool: 'none',
   setActiveTool: (tool) => set({ activeTool: tool }),
   isBeforeAfterActive: false,
@@ -288,6 +301,48 @@ export const useEditorStore = create<EditorState>((set, get) => ({
               adjustments: { ...DEFAULT_ADJUSTMENTS },
               filterId: 'normal',
               filterIntensity: 100,
+            } as ImageLayer)
+          : l
+      ),
+    }));
+  },
+
+  updateActiveImageBeauty: (beauty) => {
+    const { layers, activeLayerId } = get();
+    const activeLayer = layers.find((l) => l.id === activeLayerId) || layers.find((l) => l.type === 'image');
+    if (!activeLayer || activeLayer.type !== 'image') return;
+
+    const imgLayer = activeLayer as ImageLayer;
+    const currentBeauty = imgLayer.beauty || { ...DEFAULT_BEAUTY_SETTINGS };
+    const updatedBeauty = {
+      ...currentBeauty,
+      ...beauty,
+    };
+
+    set((state) => ({
+      layers: state.layers.map((l) =>
+        l.id === imgLayer.id
+          ? ({
+              ...l,
+              beauty: updatedBeauty,
+            } as ImageLayer)
+          : l
+      ),
+    }));
+  },
+
+  resetActiveImageBeauty: () => {
+    get().pushHistory();
+    const { layers, activeLayerId } = get();
+    const activeLayer = layers.find((l) => l.id === activeLayerId) || layers.find((l) => l.type === 'image');
+    if (!activeLayer || activeLayer.type !== 'image') return;
+
+    set((state) => ({
+      layers: state.layers.map((l) =>
+        l.id === activeLayer.id
+          ? ({
+              ...l,
+              beauty: { ...DEFAULT_BEAUTY_SETTINGS },
             } as ImageLayer)
           : l
       ),

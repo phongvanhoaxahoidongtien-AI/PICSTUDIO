@@ -11,11 +11,11 @@ export const StickersPanel: React.FC = () => {
 
   const categories = [
     { id: 'trending', label: 'Thịnh hành (Trending)', icon: Flame, isHot: true },
+    { id: 'reaction', label: 'Biểu cảm & Tim ❤️', icon: MessageCircle, isHot: true },
     { id: 'all', label: 'Tất cả', icon: Sparkles },
     { id: 'social', label: 'Mạng xã hội', icon: Share2 },
     { id: 'ecommerce', label: 'Bán hàng / Sale', icon: ShoppingBag },
     { id: 'vlog', label: 'Vlog & Story', icon: Video },
-    { id: 'reaction', label: 'Biểu cảm / Tim', icon: MessageCircle },
     { id: 'badge', label: 'Huy hiệu', icon: Award },
     { id: 'frame', label: 'Khung ảnh', icon: Frame },
     { id: 'shape', label: 'Mũi tên & Hình', icon: Shapes },
@@ -31,7 +31,11 @@ export const StickersPanel: React.FC = () => {
   });
 
   const handleAddSticker = (sticker: StickerItem) => {
-    pushHistory();
+    const maxDim = Math.min(canvasWidth, canvasHeight) * 0.45;
+    const initialScale = Math.min(1, maxDim / Math.max(sticker.defaultWidth, sticker.defaultHeight));
+    const finalW = Math.round(sticker.defaultWidth * initialScale);
+    const finalH = Math.round(sticker.defaultHeight * initialScale);
+
     const newLayer: StickerLayer = {
       id: 'sticker_' + Date.now(),
       name: sticker.name,
@@ -43,10 +47,10 @@ export const StickersPanel: React.FC = () => {
       locked: false,
       opacity: 1,
       blendMode: 'source-over',
-      x: (canvasWidth - sticker.defaultWidth) / 2,
-      y: (canvasHeight - sticker.defaultHeight) / 2,
-      width: sticker.defaultWidth,
-      height: sticker.defaultHeight,
+      x: Math.round((canvasWidth - finalW) / 2),
+      y: Math.round((canvasHeight - finalH) / 2),
+      width: finalW,
+      height: finalH,
       rotation: 0,
       scaleX: 1,
       scaleY: 1,

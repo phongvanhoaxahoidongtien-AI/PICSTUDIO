@@ -8,6 +8,7 @@ import {
   ArrowUp,
   ArrowDown,
   RotateCw,
+  Edit3,
 } from 'lucide-react';
 import { useEditorStore } from '../../stores/editorStore';
 import type {
@@ -21,12 +22,14 @@ import type {
 import { applyAdjustments, downscaleImageIfNeeded } from '../../utils/imageProcessing';
 import { FILTER_PRESETS } from '../../utils/filters';
 import { generateSampleImage } from '../../utils/sampleImages';
+import { applyBeautyEffects, DEFAULT_BEAUTY_SETTINGS } from '../../utils/beautyProcessing';
 
 interface CanvasEditorProps {
   onOpenFilePicker: () => void;
+  onOpenCamera?: () => void;
 }
 
-export const CanvasEditor: React.FC<CanvasEditorProps> = ({ onOpenFilePicker }) => {
+export const CanvasEditor: React.FC<CanvasEditorProps> = ({ onOpenFilePicker, onOpenCamera }) => {
   const {
     layers,
     activeLayerId,
@@ -44,6 +47,7 @@ export const CanvasEditor: React.FC<CanvasEditorProps> = ({ onOpenFilePicker }) 
     setPan,
     isBeforeAfterActive,
     activeTool,
+    setActiveTool,
     brushColor,
     brushSize,
     brushOpacity,
@@ -156,6 +160,11 @@ export const CanvasEditor: React.FC<CanvasEditorProps> = ({ onOpenFilePicker }) 
             const offCtx = offscreen.getContext('2d');
             if (offCtx) {
               offCtx.drawImage(img, 0, 0, layer.width, layer.height);
+
+              // Apply Beauty Retouching (Skin Smooth, Whiten, Glow, Reshape, Makeup)
+              if (imgLayer.beauty) {
+                await applyBeautyEffects(offCtx, layer.width, layer.height, imgLayer.beauty);
+              }
 
               // Merge layer adjustments with preset filter adjustments
               const filterPreset = FILTER_PRESETS.find((f) => f.id === imgLayer.filterId);
@@ -278,6 +287,27 @@ export const CanvasEditor: React.FC<CanvasEditorProps> = ({ onOpenFilePicker }) 
     renderCanvas();
   }, [renderCanvas]);
 
+  // Keyboard shortcut to delete active layer (Delete / Backspace)
+  useEffect(() => {
+    const handleKeyDown = (e: KeyboardEvent) => {
+      const activeEl = document.activeElement as HTMLElement | null;
+      if (
+        activeEl &&
+        (activeEl.tagName === 'INPUT' ||
+          activeEl.tagName === 'TEXTAREA' ||
+          activeEl.isContentEditable)
+      ) {
+        return;
+      }
+      if ((e.key === 'Delete' || e.key === 'Backspace') && activeLayerId) {
+        e.preventDefault();
+        removeLayer(activeLayerId);
+      }
+    };
+    window.addEventListener('keydown', handleKeyDown);
+    return () => window.removeEventListener('keydown', handleKeyDown);
+  }, [activeLayerId, removeLayer]);
+
   // Convert screen coordinates to canvas space
   const screenToCanvas = (clientX: number, clientY: number) => {
     if (!containerRef.current) return { x: 0, y: 0 };
@@ -293,16 +323,35 @@ export const CanvasEditor: React.FC<CanvasEditorProps> = ({ onOpenFilePicker }) 
     return { x, y };
   };
 
-  // Find layer at canvas coordinate
+  // Find layer at canvas coordinate (with rotation support)
   const hitTestLayer = (cx: number, cy: number): CanvasLayer | null => {
     for (let i = layers.length - 1; i >= 0; i--) {
       const layer = layers[i];
       if (!layer.visible || layer.locked) continue;
+
+      const layerW = layer.width * layer.scaleX;
+      const layerH = layer.height * layer.scaleY;
+
+      // Handle unrotation if layer is rotated
+      let testX = cx;
+      let testY = cy;
+      if (layer.rotation) {
+        const centerX = layer.x + layerW / 2;
+        const centerY = layer.y + layerH / 2;
+        const rad = (-layer.rotation * Math.PI) / 180;
+        const cos = Math.cos(rad);
+        const sin = Math.sin(rad);
+        const dx = cx - centerX;
+        const dy = cy - centerY;
+        testX = centerX + dx * cos - dy * sin;
+        testY = centerY + dx * sin + dy * cos;
+      }
+
       if (
-        cx >= layer.x &&
-        cx <= layer.x + layer.width * layer.scaleX &&
-        cy >= layer.y &&
-        cy <= layer.y + layer.height * layer.scaleY
+        testX >= layer.x &&
+        testX <= layer.x + layerW &&
+        testY >= layer.y &&
+        testY <= layer.y + layerH
       ) {
         return layer;
       }
@@ -496,6 +545,7 @@ export const CanvasEditor: React.FC<CanvasEditorProps> = ({ onOpenFilePicker }) 
           gamma: 1.0,
           whitePoint: 255,
         },
+        beauty: { ...DEFAULT_BEAUTY_SETTINGS },
         filterId: 'normal',
         filterIntensity: 100,
       };
@@ -521,20 +571,30 @@ export const CanvasEditor: React.FC<CanvasEditorProps> = ({ onOpenFilePicker }) 
       {/* Empty State / Welcome Screen */}
       {!hasLayers ? (
         <div className="flex flex-col items-center justify-center max-w-md mx-4 p-6 rounded-3xl bg-slate-900/90 border border-slate-800 text-center shadow-2xl backdrop-blur-md animate-in fade-in zoom-in-95">
-          <div className="w-16 h-16 rounded-2xl bg-gradient-to-tr from-indigo-500 via-purple-500 to-rose-500 flex items-center justify-center text-white shadow-lg shadow-indigo-500/30 mb-4">
+          <div className="w-16 h-16 rounded-2xl bg-gradient-to-tr from-pink-500 via-rose-500 to-indigo-600 flex items-center justify-center text-white shadow-lg shadow-pink-500/30 mb-4">
             <Camera className="w-8 h-8" />
           </div>
-          <h2 className="text-xl font-bold text-white mb-2">Bắt đầu chỉnh sửa ảnh</h2>
-          <p className="text-xs sm:text-sm text-slate-400 mb-6 leading-relaxed">
-            Ứng dụng chạy hoàn toàn offline trên trình duyệt. Mọi bức ảnh được xử lý trực tiếp trên thiết bị của bạn với độ bảo mật tối đa.
+          <h2 className="text-xl font-bold text-white mb-2">Chụp & Chỉnh sửa ảnh đẹp</h2>
+          <p className="text-xs sm:text-sm text-slate-400 mb-5 leading-relaxed">
+            Ứng dụng chạy hoàn toàn offline 100% trên trình duyệt. Chụp ảnh làm đẹp real-time và chỉnh sửa đa lớp chuyên nghiệp mà không bao giờ tải ảnh lên mạng.
           </p>
 
           <div className="w-full flex flex-col gap-2.5">
+            {onOpenCamera && (
+              <button
+                onClick={onOpenCamera}
+                className="w-full flex items-center justify-center gap-2 py-3 px-4 rounded-2xl bg-gradient-to-r from-pink-500 via-rose-500 to-amber-500 hover:opacity-95 text-white font-bold text-sm shadow-xl shadow-pink-600/30 active:scale-98 transition"
+              >
+                <Camera className="w-5 h-5" />
+                <span>Chụp ảnh đẹp ngay (Camera)</span>
+              </button>
+            )}
+
             <button
               onClick={onOpenFilePicker}
-              className="w-full flex items-center justify-center gap-2 py-3 px-4 rounded-2xl bg-gradient-to-r from-indigo-500 to-purple-600 hover:from-indigo-600 hover:to-purple-700 text-white font-semibold text-sm shadow-xl shadow-indigo-600/30 active:scale-98 transition"
+              className="w-full flex items-center justify-center gap-2 py-2.5 px-4 rounded-2xl bg-slate-800 hover:bg-slate-750 text-white font-semibold text-xs sm:text-sm border border-slate-700 active:scale-98 transition"
             >
-              <ImagePlus className="w-4 h-4" />
+              <ImagePlus className="w-4 h-4 text-indigo-400" />
               <span>Mở ảnh từ thiết bị</span>
             </button>
 
@@ -643,41 +703,107 @@ export const CanvasEditor: React.FC<CanvasEditorProps> = ({ onOpenFilePicker }) 
                 <RotateCw className="w-3 h-3" />
               </div>
 
-              {/* Quick Action Floating Bar above layer */}
-              <div className="absolute -bottom-9 left-1/2 -translate-x-1/2 flex items-center gap-1 bg-slate-900/90 border border-slate-700/60 rounded-xl px-1.5 py-1 shadow-xl pointer-events-auto">
+              {/* Quick Action Floating Bar for active layer */}
+              <div
+                onPointerDown={(e) => {
+                  e.stopPropagation();
+                }}
+                onPointerUp={(e) => e.stopPropagation()}
+                onMouseDown={(e) => e.stopPropagation()}
+                onTouchStart={(e) => e.stopPropagation()}
+                onTouchEnd={(e) => e.stopPropagation()}
+                onClick={(e) => e.stopPropagation()}
+                style={{
+                  transform: `translateX(-50%) rotate(${-activeLayer.rotation}deg)`,
+                }}
+                className={`absolute left-1/2 flex items-center gap-1 bg-slate-900/95 backdrop-blur-md border border-slate-700/80 rounded-2xl p-1 shadow-2xl pointer-events-auto z-30 select-none whitespace-nowrap ${
+                  (activeLayer.y + activeLayer.height * activeLayer.scaleY) * zoom > canvasHeight * zoom - 65
+                    ? '-top-14'
+                    : '-bottom-14'
+                }`}
+              >
+                {activeLayer.type === 'text' && (
+                  <button
+                    type="button"
+                    onPointerDown={(e) => e.stopPropagation()}
+                    onMouseDown={(e) => e.stopPropagation()}
+                    onTouchStart={(e) => e.stopPropagation()}
+                    onClick={(e) => {
+                      e.stopPropagation();
+                      setActiveTool('text');
+                    }}
+                    className="flex items-center gap-1 px-2.5 h-8 rounded-xl text-xs font-semibold text-emerald-300 hover:text-white hover:bg-emerald-600/30 active:scale-90 transition"
+                    title="Sửa nội dung văn bản"
+                  >
+                    <Edit3 className="w-3.5 h-3.5" />
+                    <span>Sửa</span>
+                  </button>
+                )}
+
                 <button
-                  onClick={() => duplicateLayer(activeLayer.id)}
-                  className="p-1 rounded text-slate-300 hover:text-white hover:bg-slate-800 transition"
-                  title="Nhân bản layer"
+                  type="button"
+                  onPointerDown={(e) => e.stopPropagation()}
+                  onMouseDown={(e) => e.stopPropagation()}
+                  onTouchStart={(e) => e.stopPropagation()}
+                  onClick={(e) => {
+                    e.stopPropagation();
+                    duplicateLayer(activeLayer.id);
+                  }}
+                  className="w-8 h-8 flex items-center justify-center rounded-xl text-slate-300 hover:text-white hover:bg-slate-800 active:scale-90 transition"
+                  title="Nhân bản (Copy)"
                 >
-                  <Copy className="w-3.5 h-3.5" />
+                  <Copy className="w-4 h-4" />
                 </button>
+
                 <button
-                  onClick={() => {
+                  type="button"
+                  disabled={layers.findIndex((l) => l.id === activeLayer.id) >= layers.length - 1}
+                  onPointerDown={(e) => e.stopPropagation()}
+                  onMouseDown={(e) => e.stopPropagation()}
+                  onTouchStart={(e) => e.stopPropagation()}
+                  onClick={(e) => {
+                    e.stopPropagation();
                     const idx = layers.findIndex((l) => l.id === activeLayer.id);
                     if (idx < layers.length - 1) reorderLayers(idx, idx + 1);
                   }}
-                  className="p-1 rounded text-slate-300 hover:text-white hover:bg-slate-800 transition"
+                  className="w-8 h-8 flex items-center justify-center rounded-xl text-slate-300 hover:text-white hover:bg-slate-800 disabled:opacity-20 active:scale-90 transition"
                   title="Lên trên 1 lớp"
                 >
-                  <ArrowUp className="w-3.5 h-3.5" />
+                  <ArrowUp className="w-4 h-4" />
                 </button>
+
                 <button
-                  onClick={() => {
+                  type="button"
+                  disabled={layers.findIndex((l) => l.id === activeLayer.id) <= 0}
+                  onPointerDown={(e) => e.stopPropagation()}
+                  onMouseDown={(e) => e.stopPropagation()}
+                  onTouchStart={(e) => e.stopPropagation()}
+                  onClick={(e) => {
+                    e.stopPropagation();
                     const idx = layers.findIndex((l) => l.id === activeLayer.id);
                     if (idx > 0) reorderLayers(idx, idx - 1);
                   }}
-                  className="p-1 rounded text-slate-300 hover:text-white hover:bg-slate-800 transition"
+                  className="w-8 h-8 flex items-center justify-center rounded-xl text-slate-300 hover:text-white hover:bg-slate-800 disabled:opacity-20 active:scale-90 transition"
                   title="Xuống dưới 1 lớp"
                 >
-                  <ArrowDown className="w-3.5 h-3.5" />
+                  <ArrowDown className="w-4 h-4" />
                 </button>
+
+                <div className="w-[1px] h-4 bg-slate-700/60 mx-0.5" />
+
                 <button
-                  onClick={() => removeLayer(activeLayer.id)}
-                  className="p-1 rounded text-rose-400 hover:text-rose-300 hover:bg-slate-800 transition"
-                  title="Xóa layer"
+                  type="button"
+                  onPointerDown={(e) => e.stopPropagation()}
+                  onMouseDown={(e) => e.stopPropagation()}
+                  onTouchStart={(e) => e.stopPropagation()}
+                  onClick={(e) => {
+                    e.stopPropagation();
+                    removeLayer(activeLayer.id);
+                  }}
+                  className="w-8 h-8 flex items-center justify-center rounded-xl text-rose-400 hover:text-white hover:bg-rose-500/30 active:scale-90 transition"
+                  title="Xóa layer (Delete)"
                 >
-                  <Trash2 className="w-3.5 h-3.5" />
+                  <Trash2 className="w-4 h-4" />
                 </button>
               </div>
             </div>

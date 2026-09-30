@@ -1,10 +1,53 @@
-# Lumix Studio - Ứng Dụng Chỉnh Sửa Ảnh PWA Offline Đa Nền Tảng
+# Lumix Studio - Ứng Dụng Chụp & Chỉnh Sửa Ảnh PWA Offline Đa Nền Tảng
 
-Trình chỉnh sửa ảnh Progressive Web App (PWA) chuyên nghiệp, hoạt động **100% ngoại tuyến (offline)**, bảo mật tối đa (ảnh không bao giờ gửi lên server), tối ưu hóa trải nghiệm mượt mà trên mọi thiết bị: **iOS (Safari)**, Android, Windows, macOS và Linux.
+Trình chụp và chỉnh sửa ảnh Progressive Web App (PWA) chuyên nghiệp giống **Meitu / Snow / BeautyCam + PicsArt / Samsung Gallery**, hoạt động **100% ngoại tuyến (offline)**, bảo mật tối đa (ảnh không bao giờ gửi lên server), tối ưu hóa trải nghiệm mượt mà trên mọi thiết bị: **iOS (Safari)**, Android, Windows, macOS và Linux.
 
 ---
 
 ## 🌟 Tính Năng Nổi Bật
+
+### 📷 A. Chế Độ Chụp Ảnh Đẹp (Camera Real-time)
+- **Truy cập Camera trước/sau mượt mà**: Chuyển đổi camera linh hoạt (`user` / `environment`), hỗ trợ đèn flash/torch (nếu thiết bị có hỗ trợ phần cứng).
+- **Làm đẹp Live tức thì**:
+  - Làm mịn da (Skin Smooth) mô phỏng thời gian thực.
+  - Làm trắng da hồng hào (Whitening) và hiệu ứng tỏa sáng sương mai (Dewy Soft Glow).
+  - Bộ lọc màu sắc nét (10+ presets thời thượng: *Điện ảnh, Vintage, Phim, Hoàng hôn, Trong trẻo, Trắng đen, Moody...*).
+  - Presets làm đẹp 1 chạm trực tiếp trên camera (*Tự nhiên, Chuẩn Hàn, Quyến rũ, Tươi tắn, Da tuyết*).
+- **Nhận diện khuôn mặt & Tự động lấy nét (Beauty Autofocus)**:
+  - Thuật toán định vị khuôn mặt offline cực nhẹ (<5ms), vẽ khung reticle chuyên nghiệp bám theo chuyển động người dùng.
+- **Tiện ích nhiếp ảnh**:
+  - Lưới bố cục 3x3 (Rule of Thirds).
+  - Hẹn giờ chụp đếm ngược (3s, 5s, 10s) với hiển thị số đếm lớn ấn tượng.
+  - Âm thanh màn trập (Web Audio API tổng hợp offline, không cần tải file ngoài) kèm rung haptic feedback.
+  - Chụp xong tự động lưu và chuyển thẳng sang Editor với bảng **Làm đẹp (Beauty)** sẵn sàng chỉnh sửa tiếp!
+
+---
+
+### 💄 B. Bảng Công Cụ Làm Đẹp Chuyên Sâu (Beauty Retouch)
+- **1-Tap Beauty Presets**:
+  - *Tự nhiên (Natural)*: Làn da mịn màng, trong trẻo như mặt mộc.
+  - *Chuẩn Hàn (Korean Glow)*: Da sương mai dewy căng bóng, má hồng đào ngọt ngào.
+  - *Quyến rũ (Glamour)*: Cằm V-line, mắt to long lanh, môi đỏ quyến rũ.
+  - *Tươi tắn (Fresh)*: Năng động rạng rỡ với tone cam đào ấm áp.
+  - *Da tuyết (Pale Snow)*: Trắng sứ thanh khiết, nhấn mắt và môi đỏ anh đào.
+  - *Da em bé (Baby Skin)*: Xóa mờ mọi khuyết điểm, mềm mịn không tì vết.
+  - *Sắc sảo (Bold Diva)*: Đường nét cằm góc cạnh, thần thái đỉnh cao.
+- **Tinh chỉnh Làn da (Skin Retouch)**:
+  - Mịn da (Bilateral-like edge preserving blur trên vùng da mặt, giữ nguyên chi tiết mắt, chân mày, tóc).
+  - Làm trắng da & Nâng sáng vùng da tự nhiên.
+  - Tỏa sáng nhẹ / Căng bóng (Dewy Glow).
+  - Cân bằng tone da (ấm áp hồng hào hoặc trắng lạnh).
+- **Định hình gương mặt (Face Reshape)**:
+  - Thon gọn cằm / V-Line (Slim Face) tự nhiên.
+  - Mắt to long lanh (Big Eyes).
+- **Trang điểm (Makeup)**:
+  - Son môi (Lipstick): Tùy chỉnh độ đậm + Bảng 10 màu son thời thượng (*Đỏ thuần, Đỏ cherry, Đỏ rượu vang, Hồng đào, Hồng fuchsia, Cam cháy, Cam san hô, Đỏ đất, Hồng đất, Nude đào*).
+  - Má hồng (Blush): Tùy chỉnh độ đậm + Bảng 6 tone màu má (*Hồng đào, Hồng phấn, Cam đào, San hô ngọt, Đỏ nhẹ, Cam cháy*).
+- **Nút so sánh Trước / Sau**: Nhấn giữ để xem tức thì ảnh gốc chưa làm đẹp.
+
+---
+
+### 🎨 C. Bộ Công Cụ Chỉnh Sửa Ảnh Đầy Đủ (Editor)
 
 ### 1. Quản lý ảnh & Dự án
 - Mở một hoặc nhiều ảnh cùng lúc từ thiết bị hoặc máy ảnh.

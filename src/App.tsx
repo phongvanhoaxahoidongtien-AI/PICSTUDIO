@@ -15,15 +15,21 @@ import { CollagePanel } from './components/CollagePanel/CollagePanel';
 import { DrawPanel } from './components/DrawPanel/DrawPanel';
 import { StickersPanel } from './components/StickersPanel/StickersPanel';
 import { LayersPanel } from './components/LayersPanel/LayersPanel';
+import { BeautyPanel } from './components/BeautyPanel/BeautyPanel';
+import { CameraView } from './components/Camera/CameraView';
+import type { LiveBeautySettings } from './components/Camera/BeautyLiveControls';
 import { ExportModal } from './components/ExportModal/ExportModal';
 import { ProjectsModal } from './components/ProjectsModal/ProjectsModal';
 import { OfflineIndicator } from './components/PWA/OfflineIndicator';
 import { useEditorStore } from './stores/editorStore';
 import { downscaleImageIfNeeded } from './utils/imageProcessing';
+import { DEFAULT_BEAUTY_SETTINGS } from './utils/beautyProcessing';
 import type { ImageLayer } from './types';
 
 export default function App() {
   const {
+    appMode,
+    setAppMode,
     activeTool,
     setActiveTool,
     layers,
@@ -49,6 +55,69 @@ export default function App() {
       fileInputRef.current.value = '';
       fileInputRef.current.click();
     }
+  };
+
+  // Process camera snapshot capture
+  const handleCapture = (
+    dataUrl: string,
+    width: number,
+    height: number,
+    liveSettings?: LiveBeautySettings
+  ) => {
+    // If first image loaded, adapt canvas dimensions
+    if (layers.length === 0) {
+      setCanvasDimensions(width, height);
+    }
+
+    const timeStr = new Date().toLocaleTimeString('vi-VN', { hour: '2-digit', minute: '2-digit' });
+    const newLayer: ImageLayer = {
+      id: 'img_' + Date.now() + '_cam',
+      name: `Ảnh chụp ${timeStr}`,
+      type: 'image',
+      visible: true,
+      locked: false,
+      opacity: 1,
+      blendMode: 'source-over',
+      src: dataUrl,
+      originalWidth: width,
+      originalHeight: height,
+      x: 0,
+      y: 0,
+      width: layers.length === 0 ? width : Math.min(width, canvasWidth),
+      height: layers.length === 0 ? height : Math.min(height, canvasHeight),
+      rotation: 0,
+      scaleX: 1,
+      scaleY: 1,
+      adjustments: {
+        brightness: 0,
+        contrast: 0,
+        saturation: 0,
+        exposure: 0,
+        highlights: 0,
+        shadows: 0,
+        temperature: 0,
+        tint: 0,
+        sharpness: 0,
+        vignette: 0,
+        clarity: 0,
+        blackPoint: 0,
+        gamma: 1.0,
+        whitePoint: 255,
+      },
+      beauty: {
+        ...DEFAULT_BEAUTY_SETTINGS,
+        smooth: liveSettings?.smooth ?? 35,
+        whiten: liveSettings?.whiten ?? 20,
+        glow: liveSettings?.glow ?? 20,
+        presetId: liveSettings?.presetId,
+      },
+      filterId: liveSettings?.filterId || 'normal',
+      filterIntensity: 100,
+    };
+
+    addLayer(newLayer);
+    setAppMode('editor');
+    setActiveTool('beauty');
   };
 
   // Process imported image files
@@ -100,6 +169,7 @@ export default function App() {
             gamma: 1.0,
             whitePoint: 255,
           },
+          beauty: { ...DEFAULT_BEAUTY_SETTINGS },
           filterId: 'normal',
           filterIntensity: 100,
         };
@@ -166,6 +236,7 @@ export default function App() {
               gamma: 1.0,
               whitePoint: 255,
             },
+            beauty: { ...DEFAULT_BEAUTY_SETTINGS },
             filterId: 'normal',
             filterIntensity: 100,
           };
@@ -251,11 +322,15 @@ export default function App() {
       <Header
         onOpenProjects={() => setIsProjectsOpen(true)}
         onOpenExport={() => setIsExportOpen(true)}
+        onOpenCamera={() => setAppMode('camera')}
       />
 
       {/* Main Canvas Workspace */}
       <main className="relative flex-1 w-full h-full flex items-center justify-center overflow-hidden">
-        <CanvasEditor onOpenFilePicker={handleOpenFilePicker} />
+        <CanvasEditor
+          onOpenFilePicker={handleOpenFilePicker}
+          onOpenCamera={() => setAppMode('camera')}
+        />
 
         {/* Interactive Crop & Rotate Tool Overlay */}
         {activeTool === 'crop' && (
@@ -267,6 +342,7 @@ export default function App() {
       </main>
 
       {/* Active Specialized Editing Panels */}
+      {activeTool === 'beauty' && <BeautyPanel />}
       {activeTool === 'adjust' && <AdjustmentsPanel />}
       {activeTool === 'filters' && <FiltersPanel />}
       {activeTool === 'text' && <TextPanel />}
@@ -276,10 +352,22 @@ export default function App() {
       {activeTool === 'layers' && <LayersPanel />}
 
       {/* Bottom Tool Bar */}
-      <BottomNav onOpenFilePicker={handleOpenFilePicker} />
+      <BottomNav
+        onOpenFilePicker={handleOpenFilePicker}
+        onOpenCamera={() => setAppMode('camera')}
+      />
 
       {/* Floating Offline Status Toast */}
       <OfflineIndicator />
+
+      {/* Real-time Beauty Camera Modal / Fullscreen View */}
+      {appMode === 'camera' && (
+        <CameraView
+          onCapture={handleCapture}
+          onClose={() => setAppMode('editor')}
+          onOpenGallery={handleOpenFilePicker}
+        />
+      )}
 
       {/* Export / Share Modal */}
       <ExportModal

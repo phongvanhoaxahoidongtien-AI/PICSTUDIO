@@ -1,5 +1,6 @@
 export type ToolType = 
   | 'none'
+  | 'beauty'
   | 'crop'
   | 'adjust'
   | 'filters'
@@ -27,6 +28,20 @@ export interface ImageAdjustments {
   blackPoint: number;    // 0 to 100 (default 0)
   gamma: number;         // 0.2 to 2.5 (default 1.0)
   whitePoint: number;    // 155 to 255 (default 255)
+}
+
+export interface BeautySettings {
+  smooth: number;        // 0 to 100 (Làm mịn da, che khuyết điểm)
+  whiten: number;        // 0 to 100 (Làm sáng da / Whitening)
+  toneWarmth: number;    // -50 to 50 (Tone da hồng hào / ấm áp)
+  glow: number;          // 0 to 100 (Hiệu ứng tỏa sáng nhẹ / Soft Glow)
+  slimFace: number;      // 0 to 100 (Thon gọn cằm / V-line)
+  bigEyes: number;       // 0 to 100 (Mắt to long lanh)
+  blush: number;         // 0 to 100 (Má hồng đào / Blush)
+  blushColor: string;    // Màu má hồng (e.g. #f43f5e)
+  lipstick: number;      // 0 to 100 (Son môi)
+  lipstickColor: string; // Màu son môi (e.g. #e11d48)
+  presetId?: string;     // ID preset mẫu
 }
 
 export type BlendMode = 
@@ -65,6 +80,7 @@ export interface ImageLayer extends BaseLayer {
   originalWidth: number;
   originalHeight: number;
   adjustments: ImageAdjustments;
+  beauty: BeautySettings;
   filterId: string;
   filterIntensity: number; // 0 to 100
 }
@@ -171,4 +187,20 @@ export interface CollageConfig {
   borderRadius: number;
   backgroundColor: string;
   aspectRatio: '1:1' | '4:5' | '16:9' | '9:16' | '3:4';
+}
+
+export interface DetectedFace {
+  x: number;
+  y: number;
+  width: number;
+  height: number;
+  confidence: number;
+  landmarks?: {
+    leftEye?: { x: number; y: number };
+    rightEye?: { x: number; y: number };
+    nose?: { x: number; y: number };
+    mouth?: { x: number; y: number };
+    leftCheek?: { x: number; y: number };
+    rightCheek?: { x: number; y: number };
+  };
 }

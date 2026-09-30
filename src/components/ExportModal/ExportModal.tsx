@@ -12,6 +12,7 @@ import { useEditorStore } from '../../stores/editorStore';
 import type { ImageLayer, TextLayer, DrawingLayer, StickerLayer } from '../../types';
 import { applyAdjustments } from '../../utils/imageProcessing';
 import { FILTER_PRESETS } from '../../utils/filters';
+import { applyBeautyEffects } from '../../utils/beautyProcessing';
 
 interface ExportModalProps {
   isOpen: boolean;
@@ -75,13 +76,17 @@ export const ExportModal: React.FC<ExportModalProps> = ({ isOpen, onClose }) => 
         await new Promise<void>((resolve) => {
           const img = new Image();
           img.crossOrigin = 'anonymous';
-          img.onload = () => {
+          img.onload = async () => {
             const offscreen = document.createElement('canvas');
             offscreen.width = Math.round(lw);
             offscreen.height = Math.round(lh);
             const offCtx = offscreen.getContext('2d');
             if (offCtx) {
               offCtx.drawImage(img, 0, 0, offscreen.width, offscreen.height);
+
+              if (imgLayer.beauty) {
+                await applyBeautyEffects(offCtx, offscreen.width, offscreen.height, imgLayer.beauty);
+              }
 
               const filterPreset = FILTER_PRESETS.find((f) => f.id === imgLayer.filterId);
               const combinedAdjustments = { ...imgLayer.adjustments };
