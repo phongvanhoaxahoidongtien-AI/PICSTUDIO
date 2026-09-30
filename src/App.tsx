@@ -138,7 +138,7 @@ export default function App() {
     setActiveTool('beauty');
   };
 
-  // Process imported image files
+  // Process imported image files (Main photo editing flow)
   const handleFileChange = async (e: React.ChangeEvent<HTMLInputElement>) => {
     const files = e.target.files;
     if (!files || files.length === 0) return;
@@ -148,39 +148,46 @@ export default function App() {
       try {
         const { dataUrl, width, height } = await downscaleImageIfNeeded(file);
 
-        // When loading the primary image from device:
-        // Set canvas to EXACT dimensions of this image!
+        // When loading an image from device library:
+        // PRESERVE 100% OF ITS ORIGINAL DIMENSIONS & PIXEL RESOLUTION!
         const currentLayers = useEditorStore.getState().layers;
         const existingImages = currentLayers.filter((l) => l.type === 'image');
-        const isPrimaryImage = existingImages.length === 0 && i === 0;
+        const isPrimaryOrReplacing = existingImages.length <= 1;
 
         let layerW = width;
         let layerH = height;
         let layerX = 0;
         let layerY = 0;
 
-        if (isPrimaryImage) {
+        if (isPrimaryOrReplacing) {
+          // If previous canvas had an old sample/single image, replace it so new photo becomes the active canvas
+          if (existingImages.length === 1 && currentLayers.length === 1) {
+            useEditorStore.getState().removeLayer(existingImages[0].id);
+          }
+          // Set canvas to 100% EXACT pixel dimensions of this photo
           setCanvasDimensions(width, height);
           layerW = width;
           layerH = height;
           layerX = 0;
           layerY = 0;
         } else {
-          // If adding an additional image on top of existing photo:
-          // Preserve its exact aspect ratio, scale gracefully to fit inside canvas
+          // If already has multiple layers, center this photo in its natural full resolution
           const curW = useEditorStore.getState().canvasWidth;
           const curH = useEditorStore.getState().canvasHeight;
-          const maxDim = Math.min(curW, curH) * 0.75;
-          const scale = Math.min(1, maxDim / Math.max(width, height));
-          layerW = Math.round(width * scale);
-          layerH = Math.round(height * scale);
+          layerW = width;
+          layerH = height;
           layerX = Math.round((curW - layerW) / 2);
           layerY = Math.round((curH - layerH) / 2);
         }
 
+        const cleanName = file.name.replace(/\.[^/.]+$/, '').trim();
+        if (cleanName && isPrimaryOrReplacing) {
+          useEditorStore.getState().setProjectName(cleanName.substring(0, 32));
+        }
+
         const newLayer: ImageLayer = {
           id: 'img_' + Date.now() + '_' + i,
-          name: file.name.substring(0, 24) || `Ảnh ${currentLayers.length + 1}`,
+          name: cleanName || `Ảnh ${currentLayers.length + 1}`,
           type: 'image',
           visible: true,
           locked: false,
@@ -218,6 +225,15 @@ export default function App() {
         };
 
         addLayer(newLayer);
+        useEditorStore.getState().setActiveLayerId(newLayer.id);
+
+        // Instantly trigger fit-to-screen so the entire photo fits comfortably on screen
+        setTimeout(() => {
+          window.dispatchEvent(new CustomEvent('lumix:fit-to-screen'));
+        }, 30);
+        setTimeout(() => {
+          window.dispatchEvent(new CustomEvent('lumix:fit-to-screen'));
+        }, 150);
       } catch (err) {
         console.error('Failed to import image:', err);
       }
@@ -244,14 +260,17 @@ export default function App() {
           const { dataUrl, width, height } = await downscaleImageIfNeeded(file);
           const currentLayers = useEditorStore.getState().layers;
           const existingImages = currentLayers.filter((l) => l.type === 'image');
-          const isPrimaryImage = existingImages.length === 0 && i === 0;
+          const isPrimaryOrReplacing = existingImages.length <= 1;
 
           let layerW = width;
           let layerH = height;
           let layerX = 0;
           let layerY = 0;
 
-          if (isPrimaryImage) {
+          if (isPrimaryOrReplacing) {
+            if (existingImages.length === 1 && currentLayers.length === 1) {
+              useEditorStore.getState().removeLayer(existingImages[0].id);
+            }
             setCanvasDimensions(width, height);
             layerW = width;
             layerH = height;
@@ -260,17 +279,20 @@ export default function App() {
           } else {
             const curW = useEditorStore.getState().canvasWidth;
             const curH = useEditorStore.getState().canvasHeight;
-            const maxDim = Math.min(curW, curH) * 0.75;
-            const scale = Math.min(1, maxDim / Math.max(width, height));
-            layerW = Math.round(width * scale);
-            layerH = Math.round(height * scale);
+            layerW = width;
+            layerH = height;
             layerX = Math.round((curW - layerW) / 2);
             layerY = Math.round((curH - layerH) / 2);
           }
 
+          const cleanName = file.name.replace(/\.[^/.]+$/, '').trim();
+          if (cleanName && isPrimaryOrReplacing) {
+            useEditorStore.getState().setProjectName(cleanName.substring(0, 32));
+          }
+
           const newLayer: ImageLayer = {
             id: 'img_' + Date.now() + '_' + i,
-            name: file.name.substring(0, 24) || `Ảnh ${currentLayers.length + 1}`,
+            name: cleanName || `Ảnh ${currentLayers.length + 1}`,
             type: 'image',
             visible: true,
             locked: false,
@@ -307,6 +329,14 @@ export default function App() {
             filterIntensity: 100,
           };
           addLayer(newLayer);
+          useEditorStore.getState().setActiveLayerId(newLayer.id);
+
+          setTimeout(() => {
+            window.dispatchEvent(new CustomEvent('lumix:fit-to-screen'));
+          }, 30);
+          setTimeout(() => {
+            window.dispatchEvent(new CustomEvent('lumix:fit-to-screen'));
+          }, 150);
         } catch (err) {
           console.error('Drop image failed:', err);
         }

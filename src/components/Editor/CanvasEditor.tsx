@@ -40,6 +40,7 @@ export const CanvasEditor: React.FC<CanvasEditorProps> = ({ onOpenFilePicker, on
     reorderLayers,
     canvasWidth,
     canvasHeight,
+    setCanvasDimensions,
     canvasBackgroundColor,
     zoom,
     setZoom,
@@ -287,30 +288,50 @@ export const CanvasEditor: React.FC<CanvasEditorProps> = ({ onOpenFilePicker, on
     renderCanvas();
   }, [renderCanvas]);
 
-  // Auto-fit canvas into viewport whenever canvas dimensions change or screen resizes
+  // Auto-fit canvas into viewport whenever canvas dimensions change, panel opens/closes, or screen resizes
   useEffect(() => {
+    if (!containerRef.current) return;
+
     const handleFit = () => {
-      if (!containerRef.current || canvasWidth <= 0 || canvasHeight <= 0) return;
-      const rect = containerRef.current.getBoundingClientRect();
-      if (rect.width <= 0 || rect.height <= 0) return;
+      requestAnimationFrame(() => {
+        if (!containerRef.current || canvasWidth <= 0 || canvasHeight <= 0) return;
+        const rect = containerRef.current.getBoundingClientRect();
+        if (rect.width <= 0 || rect.height <= 0) return;
 
-      const margin = rect.width < 640 ? 24 : 48;
-      const availW = Math.max(100, rect.width - margin);
-      const availH = Math.max(100, rect.height - margin);
-      const fitScale = Math.min(availW / canvasWidth, availH / canvasHeight);
+        // Generous padding so the entire image is always comfortably visible with breathing room
+        const paddingX = rect.width < 640 ? 16 : 36;
+        const paddingY = rect.height < 640 ? 16 : 36;
+        const availW = Math.max(20, rect.width - paddingX);
+        const availH = Math.max(20, rect.height - paddingY);
+        const fitScale = Math.min(availW / canvasWidth, availH / canvasHeight);
 
-      setZoom(Number(Math.max(0.05, Math.min(fitScale, 1)).toFixed(3)));
-      setPan({ x: 0, y: 0 });
+        // Apply the precise fit scale
+        const finalZoom = Number(Math.max(0.01, fitScale).toFixed(4));
+        setZoom(finalZoom);
+        setPan({ x: 0, y: 0 });
+      });
     };
 
+    // Run fit immediately and after layout settles
     handleFit();
+    const timer = setTimeout(handleFit, 60);
+
+    // Use ResizeObserver to detect when tool panels (Beauty, Adjustments, Filters, etc.) open/close
+    const ro = new ResizeObserver(() => {
+      handleFit();
+    });
+    ro.observe(containerRef.current);
+
     window.addEventListener('lumix:fit-to-screen', handleFit);
     window.addEventListener('resize', handleFit);
+
     return () => {
+      clearTimeout(timer);
+      ro.disconnect();
       window.removeEventListener('lumix:fit-to-screen', handleFit);
       window.removeEventListener('resize', handleFit);
     };
-  }, [canvasWidth, canvasHeight, setZoom, setPan]);
+  }, [canvasWidth, canvasHeight, activeTool, setZoom, setPan]);
 
   // Keyboard shortcut to delete active layer (Delete / Backspace)
   useEffect(() => {
@@ -531,11 +552,23 @@ export const CanvasEditor: React.FC<CanvasEditorProps> = ({ onOpenFilePicker, on
     pinchRef.current = null;
   };
 
+  // Double click / tap to toggle between Fit to Screen and 100% Native Resolution
+  const handleDoubleClick = (e: React.MouseEvent) => {
+    e.stopPropagation();
+    if (Math.abs(zoom - 1) < 0.05) {
+      window.dispatchEvent(new CustomEvent('lumix:fit-to-screen'));
+    } else {
+      setZoom(1);
+      setPan({ x: 0, y: 0 });
+    }
+  };
+
   // Load sample image
   const handleLoadSample = (theme: 'landscape' | 'portrait' | 'neon') => {
     const dataUrl = generateSampleImage(theme);
     const img = new Image();
     img.onload = () => {
+      setCanvasDimensions(img.width, img.height);
       const newLayer: ImageLayer = {
         id: 'img_' + Date.now(),
         name: `Ảnh mẫu ${theme === 'landscape' ? 'Hoàng hôn' : theme === 'portrait' ? 'Chân dung' : 'Neon'}`,
@@ -549,8 +582,8 @@ export const CanvasEditor: React.FC<CanvasEditorProps> = ({ onOpenFilePicker, on
         originalHeight: img.height,
         x: 0,
         y: 0,
-        width: canvasWidth,
-        height: canvasHeight,
+        width: img.width,
+        height: img.height,
         rotation: 0,
         scaleX: 1,
         scaleY: 1,
@@ -660,6 +693,7 @@ export const CanvasEditor: React.FC<CanvasEditorProps> = ({ onOpenFilePicker, on
       ) : (
         /* The Interactive Canvas */
         <div
+          onDoubleClick={handleDoubleClick}
           style={{
             width: `${canvasWidth * zoom}px`,
             height: `${canvasHeight * zoom}px`,
@@ -834,6 +868,28 @@ export const CanvasEditor: React.FC<CanvasEditorProps> = ({ onOpenFilePicker, on
             </div>
           )}
         </div>
+      )}
+
+      {/* Floating Zoom Indicator & Quick Fit Pill */}
+      {hasLayers && (
+        <button
+          onClick={() => {
+            if (Math.abs(zoom - 1) < 0.05) {
+              window.dispatchEvent(new CustomEvent('lumix:fit-to-screen'));
+            } else {
+              setZoom(1);
+              setPan({ x: 0, y: 0 });
+            }
+          }}
+          className="absolute bottom-3 right-3 z-20 flex items-center gap-1.5 px-2.5 py-1 rounded-full bg-slate-900/85 hover:bg-slate-800 backdrop-blur-md border border-slate-700/60 text-slate-300 hover:text-white text-[11px] font-mono shadow-xl transition active:scale-95"
+          title="Chạm để chuyển đổi giữa Vừa màn hình (Fit) và 100% Gốc"
+        >
+          <span className="w-1.5 h-1.5 rounded-full bg-indigo-400" />
+          <span>{Math.round(zoom * 100)}%</span>
+          <span className="text-[10px] text-slate-400 font-sans hidden xs:inline">
+            {Math.abs(zoom - 1) < 0.05 ? 'Gốc 1:1' : 'Vừa khít'}
+          </span>
+        </button>
       )}
     </div>
   );

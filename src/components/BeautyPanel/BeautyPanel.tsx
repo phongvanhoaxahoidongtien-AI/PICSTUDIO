@@ -226,6 +226,23 @@ export const BeautyPanel: React.FC = () => {
               <p className="text-[10px] text-slate-400">Xóa khuyết điểm và làm mềm mịn da, giữ nét tự nhiên của mắt và chân mày.</p>
             </div>
 
+            {/* Blemish & Acne Smooth */}
+            <div className="space-y-1">
+              <div className="flex justify-between text-xs">
+                <span className="text-slate-300 font-medium">Xóa mụn & Khuyết điểm (Blemish Remover)</span>
+                <span className="text-pink-400 font-mono font-bold">{beauty.blemishSmooth ?? 0}%</span>
+              </div>
+              <input
+                type="range"
+                min="0"
+                max="100"
+                value={beauty.blemishSmooth ?? 0}
+                onChange={(e) => updateActiveImageBeauty({ blemishSmooth: Number(e.target.value), presetId: undefined })}
+                className="w-full accent-pink-500 h-1.5 bg-slate-700 rounded-lg cursor-pointer"
+              />
+              <p className="text-[10px] text-slate-400">Làm mờ vết thâm, tàn nhang và mụn đỏ trên da.</p>
+            </div>
+
             {/* Whitening */}
             <div className="space-y-1">
               <div className="flex justify-between text-xs">
@@ -243,10 +260,27 @@ export const BeautyPanel: React.FC = () => {
               <p className="text-[10px] text-slate-400">Nâng tone da sáng trong trẻo mà không làm cháy sáng vùng nền.</p>
             </div>
 
+            {/* Teeth Whitening */}
+            <div className="space-y-1">
+              <div className="flex justify-between text-xs">
+                <span className="text-slate-300 font-medium">Trắng răng rạng rỡ (Teeth Whitening)</span>
+                <span className="text-pink-400 font-mono font-bold">{beauty.teethWhiten ?? 0}%</span>
+              </div>
+              <input
+                type="range"
+                min="0"
+                max="100"
+                value={beauty.teethWhiten ?? 0}
+                onChange={(e) => updateActiveImageBeauty({ teethWhiten: Number(e.target.value), presetId: undefined })}
+                className="w-full accent-pink-500 h-1.5 bg-slate-700 rounded-lg cursor-pointer"
+              />
+              <p className="text-[10px] text-slate-400">Khử vàng ố, mang lại nụ cười trắng sáng tự tin như sao Meitu.</p>
+            </div>
+
             {/* Dewy Glow */}
             <div className="space-y-1">
               <div className="flex justify-between text-xs">
-                <span className="text-slate-300 font-medium">Tỏa sáng nhẹ / Căng bóng (Dewy Glow)</span>
+                <span className="text-slate-300 font-medium">Căng bóng da sương mai (Dewy Glass-Skin)</span>
                 <span className="text-pink-400 font-mono font-bold">{beauty.glow}%</span>
               </div>
               <input
@@ -282,15 +316,32 @@ export const BeautyPanel: React.FC = () => {
                 <span>Hồng hào ấm áp</span>
               </div>
             </div>
+
+            {/* Dark Circles */}
+            <div className="space-y-1">
+              <div className="flex justify-between text-xs">
+                <span className="text-slate-300 font-medium">Xóa quầng thâm mắt (Dark Circles)</span>
+                <span className="text-pink-400 font-mono font-bold">{beauty.darkCircles ?? 0}%</span>
+              </div>
+              <input
+                type="range"
+                min="0"
+                max="100"
+                value={beauty.darkCircles ?? 0}
+                onChange={(e) => updateActiveImageBeauty({ darkCircles: Number(e.target.value), presetId: undefined })}
+                className="w-full accent-pink-500 h-1.5 bg-slate-700 rounded-lg cursor-pointer"
+              />
+              <p className="text-[10px] text-slate-400">Làm sáng bọng mắt, xóa tan vẻ mệt mỏi cho đôi mắt rạng rỡ.</p>
+            </div>
           </div>
         )}
 
-        {/* Tab 3: Face Reshape (Slim Face & Big Eyes) */}
+        {/* Tab 3: Face Reshape & Body */}
         {activeTab === 'reshape' && (
           <div className="space-y-4 max-w-2xl mx-auto">
             <div className="p-2.5 rounded-xl bg-slate-800/40 border border-slate-700/60 flex items-center gap-2 text-[11px] text-slate-300">
               <Sparkles className="w-4 h-4 text-pink-400 shrink-0" />
-              <span>Tự động định vị đường nét cằm và mắt để căn chỉnh tỉ lệ vàng hoàn toàn tự nhiên.</span>
+              <span>Định vị đường nét thông minh để căn chỉnh tỉ lệ vàng Meitu hoàn toàn tự nhiên.</span>
             </div>
 
             {/* Slim Face */}
@@ -326,10 +377,81 @@ export const BeautyPanel: React.FC = () => {
               />
               <p className="text-[10px] text-slate-400">Phóng to nhẹ vùng mắt tạo ánh nhìn có hồn và thu hút.</p>
             </div>
+
+            {/* Eye Brighten */}
+            <div className="space-y-1">
+              <div className="flex justify-between text-xs">
+                <span className="text-slate-300 font-medium">Sáng tròng mắt (Eye Brighten)</span>
+                <span className="text-pink-400 font-mono font-bold">{beauty.eyeBright ?? 0}%</span>
+              </div>
+              <input
+                type="range"
+                min="0"
+                max="100"
+                value={beauty.eyeBright ?? 0}
+                onChange={(e) => updateActiveImageBeauty({ eyeBright: Number(e.target.value), presetId: undefined })}
+                className="w-full accent-pink-500 h-1.5 bg-slate-700 rounded-lg cursor-pointer"
+              />
+              <p className="text-[10px] text-slate-400">Tăng độ trong và tương phản cho tròng mắt long lanh như đeo lens.</p>
+            </div>
+
+            {/* Nose Slim */}
+            <div className="space-y-1">
+              <div className="flex justify-between text-xs">
+                <span className="text-slate-300 font-medium">Thu gọn sống mũi (Nose Slim)</span>
+                <span className="text-pink-400 font-mono font-bold">{beauty.noseSlim ?? 0}%</span>
+              </div>
+              <input
+                type="range"
+                min="0"
+                max="100"
+                value={beauty.noseSlim ?? 0}
+                onChange={(e) => updateActiveImageBeauty({ noseSlim: Number(e.target.value), presetId: undefined })}
+                className="w-full accent-pink-500 h-1.5 bg-slate-700 rounded-lg cursor-pointer"
+              />
+              <p className="text-[10px] text-slate-400">Tạo khối nhẹ hai bên cánh mũi giúp mũi cao và thon thả.</p>
+            </div>
+
+            {/* Highlighter */}
+            <div className="space-y-1">
+              <div className="flex justify-between text-xs">
+                <span className="text-slate-300 font-medium">Bắt sáng gò má & Sống mũi (Highlighter)</span>
+                <span className="text-pink-400 font-mono font-bold">{beauty.highlighter ?? 0}%</span>
+              </div>
+              <input
+                type="range"
+                min="0"
+                max="100"
+                value={beauty.highlighter ?? 0}
+                onChange={(e) => updateActiveImageBeauty({ highlighter: Number(e.target.value), presetId: undefined })}
+                className="w-full accent-pink-500 h-1.5 bg-slate-700 rounded-lg cursor-pointer"
+              />
+              <p className="text-[10px] text-slate-400">Hiệu ứng ngọc trai bắt sáng tinh tế trên các điểm cao của khuôn mặt.</p>
+            </div>
+
+            {/* Body Reshape / Leg Lengthening */}
+            <div className="space-y-1 pt-2 border-t border-slate-800">
+              <div className="flex justify-between text-xs">
+                <span className="text-slate-300 font-medium flex items-center gap-1.5">
+                  <span className="text-pink-400 font-bold">✨ Meitu Pro:</span>
+                  Kéo dài chân / Thon dáng (Body Reshape)
+                </span>
+                <span className="text-pink-400 font-mono font-bold">{beauty.bodyReshape ?? 0}%</span>
+              </div>
+              <input
+                type="range"
+                min="0"
+                max="100"
+                value={beauty.bodyReshape ?? 0}
+                onChange={(e) => updateActiveImageBeauty({ bodyReshape: Number(e.target.value), presetId: undefined })}
+                className="w-full accent-pink-500 h-1.5 bg-slate-700 rounded-lg cursor-pointer"
+              />
+              <p className="text-[10px] text-slate-400">Kéo dài đôi chân chuẩn tỉ lệ người mẫu, giữ nguyên khuôn mặt và nửa trên cơ thể.</p>
+            </div>
           </div>
         )}
 
-        {/* Tab 4: Makeup (Lipstick & Blush) */}
+        {/* Tab 4: Makeup (Lipstick, Blush & Sparkle) */}
         {activeTab === 'makeup' && (
           <div className="space-y-4 max-w-2xl mx-auto">
             {/* Lipstick Section */}
@@ -348,6 +470,20 @@ export const BeautyPanel: React.FC = () => {
                 max="100"
                 value={beauty.lipstick}
                 onChange={(e) => updateActiveImageBeauty({ lipstick: Number(e.target.value), presetId: undefined })}
+                className="w-full accent-pink-500 h-1.5 bg-slate-700 rounded-lg cursor-pointer"
+              />
+
+              {/* Jelly Gloss */}
+              <div className="flex justify-between text-xs pt-1">
+                <span className="text-slate-300 font-medium">Độ bóng mọng môi thạch (Jelly Gloss)</span>
+                <span className="text-pink-400 font-mono font-bold">{beauty.lipstickGloss ?? 0}%</span>
+              </div>
+              <input
+                type="range"
+                min="0"
+                max="100"
+                value={beauty.lipstickGloss ?? 0}
+                onChange={(e) => updateActiveImageBeauty({ lipstickGloss: Number(e.target.value), presetId: undefined })}
                 className="w-full accent-pink-500 h-1.5 bg-slate-700 rounded-lg cursor-pointer"
               />
 
@@ -426,6 +562,26 @@ export const BeautyPanel: React.FC = () => {
                   })}
                 </div>
               </div>
+            </div>
+
+            {/* Sparkle Dust Kira-Kira */}
+            <div className="space-y-1 p-3 rounded-xl bg-slate-800/40 border border-slate-700/60">
+              <div className="flex justify-between text-xs">
+                <span className="text-slate-200 font-semibold flex items-center gap-1.5">
+                  <Sparkles className="w-3.5 h-3.5 text-amber-300" />
+                  Bụi sao lấp lánh (Meitu Kira-Kira)
+                </span>
+                <span className="text-amber-400 font-mono font-bold">{beauty.sparkleDust ?? 0}%</span>
+              </div>
+              <input
+                type="range"
+                min="0"
+                max="100"
+                value={beauty.sparkleDust ?? 0}
+                onChange={(e) => updateActiveImageBeauty({ sparkleDust: Number(e.target.value), presetId: undefined })}
+                className="w-full accent-amber-400 h-1.5 bg-slate-700 rounded-lg cursor-pointer"
+              />
+              <p className="text-[10px] text-slate-400">Hiệu ứng kim tuyến ngôi sao lấp lánh bắt sáng quanh mắt và gò má.</p>
             </div>
           </div>
         )}

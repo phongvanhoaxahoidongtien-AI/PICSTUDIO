@@ -124,7 +124,12 @@ export const useEditorStore = create<EditorState>((set, get) => ({
     set((state) => ({
       pan: typeof panOrFn === 'function' ? panOrFn(state.pan) : panOrFn,
     })),
-  resetZoomPan: () => set({ zoom: 1, pan: { x: 0, y: 0 } }),
+  resetZoomPan: () => {
+    set({ pan: { x: 0, y: 0 } });
+    if (typeof window !== 'undefined') {
+      window.dispatchEvent(new CustomEvent('lumix:fit-to-screen'));
+    }
+  },
   setCanvasDimensions: (width, height) => {
     get().pushHistory();
     set({ canvasWidth: width, canvasHeight: height });

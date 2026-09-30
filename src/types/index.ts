@@ -37,10 +37,19 @@ export interface BeautySettings {
   glow: number;          // 0 to 100 (Hiệu ứng tỏa sáng nhẹ / Soft Glow)
   slimFace: number;      // 0 to 100 (Thon gọn cằm / V-line)
   bigEyes: number;       // 0 to 100 (Mắt to long lanh)
+  darkCircles?: number;  // 0 to 100 (Xóa quầng thâm mắt Meitu)
+  eyeBright?: number;    // 0 to 100 (Làm sáng tròng mắt long lanh)
+  noseSlim?: number;     // 0 to 100 (Sống mũi thon gọn)
+  highlighter?: number;  // 0 to 100 (Bắt sáng gò má & sống mũi)
+  teethWhiten?: number;  // 0 to 100 (Trắng răng rạng rỡ Meitu)
+  blemishSmooth?: number;// 0 to 100 (Xóa mụn khuyết điểm Meitu)
+  bodyReshape?: number;  // 0 to 100 (Kéo dài chân / Thon dáng Meitu)
   blush: number;         // 0 to 100 (Má hồng đào / Blush)
   blushColor: string;    // Màu má hồng (e.g. #f43f5e)
   lipstick: number;      // 0 to 100 (Son môi)
   lipstickColor: string; // Màu son môi (e.g. #e11d48)
+  lipstickGloss?: number;// 0 to 100 (Độ căng bóng môi thạch Jelly Gloss)
+  sparkleDust?: number;  // 0 to 100 (Bụi sao lấp lánh Meitu Kira-Kira)
   presetId?: string;     // ID preset mẫu
 }
 

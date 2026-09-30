@@ -16,11 +16,11 @@ export const PWAInstallButton: React.FC = () => {
     return (
       <button
         onClick={install}
-        className="flex items-center gap-1.5 px-3 py-1.5 rounded-full bg-gradient-to-r from-indigo-500 to-rose-500 text-white text-xs font-semibold shadow-md hover:opacity-90 active:scale-95 transition"
+        className="flex items-center gap-1.5 p-1.5 sm:px-3 sm:py-1.5 rounded-xl sm:rounded-full bg-gradient-to-r from-indigo-500 to-rose-500 text-white text-xs font-semibold shadow-md hover:opacity-90 active:scale-95 transition shrink-0"
         title="Cài đặt ứng dụng vào màn hình chính"
       >
         <Download className="w-3.5 h-3.5" />
-        <span>Cài app</span>
+        <span className="hidden sm:inline">Cài app</span>
       </button>
     );
   }
@@ -31,11 +31,11 @@ export const PWAInstallButton: React.FC = () => {
       <>
         <button
           onClick={() => setShowIOSGuide(true)}
-          className="flex items-center gap-1.5 px-2.5 py-1 rounded-full border border-indigo-400/40 bg-indigo-500/10 text-indigo-400 hover:bg-indigo-500/20 text-xs font-medium transition active:scale-95"
+          className="flex items-center gap-1 p-1.5 sm:px-2.5 sm:py-1 rounded-xl sm:rounded-full border border-indigo-400/40 bg-indigo-500/10 text-indigo-400 hover:bg-indigo-500/20 text-xs font-medium transition active:scale-95 shrink-0"
           title="Cài đặt lên iPhone / iPad"
         >
           <Download className="w-3.5 h-3.5" />
-          <span>Cài trên iOS</span>
+          <span className="hidden sm:inline">Cài trên iOS</span>
         </button>
 
         {showIOSGuide && (
