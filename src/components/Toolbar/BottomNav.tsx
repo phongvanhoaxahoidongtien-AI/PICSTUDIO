@@ -36,7 +36,14 @@ export const BottomNav: React.FC<BottomNavProps> = ({ onOpenFilePicker, onOpenCa
   ];
 
   return (
-    <nav className="h-16 bg-slate-900/95 dark:bg-slate-950/95 backdrop-blur-md border-t border-slate-800 px-2 flex items-center justify-between z-30 select-none pb-safe">
+    <nav
+      style={{
+        paddingBottom: 'env(safe-area-inset-bottom, 0px)',
+        paddingLeft: 'max(0.5rem, env(safe-area-inset-left, 0px))',
+        paddingRight: 'max(0.5rem, env(safe-area-inset-right, 0px))',
+      }}
+      className="min-h-[calc(4rem+env(safe-area-inset-bottom,0px))] w-full bg-slate-900/95 dark:bg-slate-950/95 backdrop-blur-md border-t border-slate-800 flex items-center justify-between z-30 select-none pb-safe shrink-0"
+    >
       <div className="flex items-center gap-1 sm:gap-2 overflow-x-auto w-full justify-start sm:justify-center py-1 scrollbar-none">
         {/* Quick Camera Capture Button */}
         {onOpenCamera && (

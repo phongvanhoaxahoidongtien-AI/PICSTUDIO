@@ -287,6 +287,31 @@ export const CanvasEditor: React.FC<CanvasEditorProps> = ({ onOpenFilePicker, on
     renderCanvas();
   }, [renderCanvas]);
 
+  // Auto-fit canvas into viewport whenever canvas dimensions change or screen resizes
+  useEffect(() => {
+    const handleFit = () => {
+      if (!containerRef.current || canvasWidth <= 0 || canvasHeight <= 0) return;
+      const rect = containerRef.current.getBoundingClientRect();
+      if (rect.width <= 0 || rect.height <= 0) return;
+
+      const margin = rect.width < 640 ? 24 : 48;
+      const availW = Math.max(100, rect.width - margin);
+      const availH = Math.max(100, rect.height - margin);
+      const fitScale = Math.min(availW / canvasWidth, availH / canvasHeight);
+
+      setZoom(Number(Math.max(0.05, Math.min(fitScale, 1)).toFixed(3)));
+      setPan({ x: 0, y: 0 });
+    };
+
+    handleFit();
+    window.addEventListener('lumix:fit-to-screen', handleFit);
+    window.addEventListener('resize', handleFit);
+    return () => {
+      window.removeEventListener('lumix:fit-to-screen', handleFit);
+      window.removeEventListener('resize', handleFit);
+    };
+  }, [canvasWidth, canvasHeight, setZoom, setPan]);
+
   // Keyboard shortcut to delete active layer (Delete / Backspace)
   useEffect(() => {
     const handleKeyDown = (e: KeyboardEvent) => {

@@ -18,32 +18,39 @@ export const DEFAULT_ADJUSTMENTS: ImageAdjustments = {
 };
 
 /**
- * Safely downscale huge phone photos (e.g., 48MP) to prevent iOS Safari 256MB canvas memory limit crash.
+ * Safely load photos while preserving 100% of their original pixel dimensions and quality.
+ * Only downscales if exceeding 4096px (e.g. 48MP/100MP raw sensors) to prevent iOS Safari 256MB canvas memory crash.
  */
 export async function downscaleImageIfNeeded(
   fileOrBlob: Blob | File,
-  maxDimension = 2400
+  maxDimension = 4096
 ): Promise<{ dataUrl: string; width: number; height: number }> {
   return new Promise((resolve, reject) => {
     const reader = new FileReader();
     reader.onload = (e) => {
+      const originalDataUrl = e.target?.result as string;
       const img = new Image();
       img.onload = () => {
-        let width = img.naturalWidth || img.width;
-        let height = img.naturalHeight || img.height;
+        const naturalW = img.naturalWidth || img.width;
+        const naturalH = img.naturalHeight || img.height;
 
-        if (width > maxDimension || height > maxDimension) {
-          const ratio = Math.min(maxDimension / width, maxDimension / height);
-          width = Math.round(width * ratio);
-          height = Math.round(height * ratio);
+        // If the photo is within safe limits (<= 4096px), KEEP 100% EXACT ORIGINAL BYTES & DIMENSIONS!
+        if (naturalW <= maxDimension && naturalH <= maxDimension) {
+          resolve({ dataUrl: originalDataUrl, width: naturalW, height: naturalH });
+          return;
         }
+
+        // Only scale down if extremely huge (> 4096px) to protect mobile browsers from memory exhaustion
+        const ratio = Math.min(maxDimension / naturalW, maxDimension / naturalH);
+        const width = Math.round(naturalW * ratio);
+        const height = Math.round(naturalH * ratio);
 
         const canvas = document.createElement('canvas');
         canvas.width = width;
         canvas.height = height;
         const ctx = canvas.getContext('2d');
         if (!ctx) {
-          resolve({ dataUrl: e.target?.result as string, width, height });
+          resolve({ dataUrl: originalDataUrl, width: naturalW, height: naturalH });
           return;
         }
 
@@ -51,11 +58,15 @@ export async function downscaleImageIfNeeded(
         ctx.imageSmoothingQuality = 'high';
         ctx.drawImage(img, 0, 0, width, height);
 
-        const dataUrl = canvas.toDataURL('image/jpeg', 0.92);
-        resolve({ dataUrl, width, height });
+        const isPng = fileOrBlob.type === 'image/png';
+        const finalDataUrl = isPng
+          ? canvas.toDataURL('image/png')
+          : canvas.toDataURL('image/jpeg', 0.95);
+
+        resolve({ dataUrl: finalDataUrl, width, height });
       };
       img.onerror = reject;
-      img.src = e.target?.result as string;
+      img.src = originalDataUrl;
     };
     reader.onerror = reject;
     reader.readAsDataURL(fileOrBlob);

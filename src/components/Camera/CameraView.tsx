@@ -321,7 +321,14 @@ export const CameraView: React.FC<CameraViewProps> = ({
       )}
 
       {/* Top Floating Controls Bar */}
-      <div className="relative z-30 pt-safe px-3 sm:px-4 py-3 flex items-center justify-between bg-gradient-to-b from-black/80 via-black/40 to-transparent">
+      <div
+        style={{
+          paddingTop: 'calc(0.75rem + env(safe-area-inset-top, 0px))',
+          paddingLeft: 'max(0.75rem, env(safe-area-inset-left, 0px))',
+          paddingRight: 'max(0.75rem, env(safe-area-inset-right, 0px))',
+        }}
+        className="relative z-30 px-3 sm:px-4 pb-3 flex items-center justify-between bg-gradient-to-b from-black/80 via-black/40 to-transparent"
+      >
         {/* Back to Editor */}
         <button
           onClick={onClose}
@@ -495,7 +502,14 @@ export const CameraView: React.FC<CameraViewProps> = ({
       </div>
 
       {/* Bottom Camera Controls & Shutter */}
-      <div className="relative z-30 pb-safe px-4 pt-2 pb-5 bg-gradient-to-t from-black via-black/80 to-transparent flex flex-col items-center">
+      <div
+        style={{
+          paddingBottom: 'calc(1.25rem + env(safe-area-inset-bottom, 0px))',
+          paddingLeft: 'max(1rem, env(safe-area-inset-left, 0px))',
+          paddingRight: 'max(1rem, env(safe-area-inset-right, 0px))',
+        }}
+        className="relative z-30 px-4 pt-2 bg-gradient-to-t from-black via-black/80 to-transparent flex flex-col items-center"
+      >
         {/* Floating Live Beauty & Filters Toolbar */}
         <BeautyLiveControls
           settings={liveBeauty}

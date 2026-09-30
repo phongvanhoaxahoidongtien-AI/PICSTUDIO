@@ -64,9 +64,27 @@ export default function App() {
     height: number,
     liveSettings?: LiveBeautySettings
   ) => {
-    // If first image loaded, adapt canvas dimensions
-    if (layers.length === 0) {
+    const existingImages = layers.filter((l) => l.type === 'image');
+    const isPrimary = existingImages.length === 0;
+
+    let layerW = width;
+    let layerH = height;
+    let layerX = 0;
+    let layerY = 0;
+
+    if (isPrimary) {
       setCanvasDimensions(width, height);
+      layerW = width;
+      layerH = height;
+    } else {
+      const curW = canvasWidth;
+      const curH = canvasHeight;
+      const maxDim = Math.min(curW, curH) * 0.75;
+      const scale = Math.min(1, maxDim / Math.max(width, height));
+      layerW = Math.round(width * scale);
+      layerH = Math.round(height * scale);
+      layerX = Math.round((curW - layerW) / 2);
+      layerY = Math.round((curH - layerH) / 2);
     }
 
     const timeStr = new Date().toLocaleTimeString('vi-VN', { hour: '2-digit', minute: '2-digit' });
@@ -81,10 +99,10 @@ export default function App() {
       src: dataUrl,
       originalWidth: width,
       originalHeight: height,
-      x: 0,
-      y: 0,
-      width: layers.length === 0 ? width : Math.min(width, canvasWidth),
-      height: layers.length === 0 ? height : Math.min(height, canvasHeight),
+      x: layerX,
+      y: layerY,
+      width: layerW,
+      height: layerH,
       rotation: 0,
       scaleX: 1,
       scaleY: 1,
@@ -130,14 +148,39 @@ export default function App() {
       try {
         const { dataUrl, width, height } = await downscaleImageIfNeeded(file);
 
-        // If this is the first image loaded, adapt canvas dimensions
-        if (layers.length === 0 && i === 0) {
+        // When loading the primary image from device:
+        // Set canvas to EXACT dimensions of this image!
+        const currentLayers = useEditorStore.getState().layers;
+        const existingImages = currentLayers.filter((l) => l.type === 'image');
+        const isPrimaryImage = existingImages.length === 0 && i === 0;
+
+        let layerW = width;
+        let layerH = height;
+        let layerX = 0;
+        let layerY = 0;
+
+        if (isPrimaryImage) {
           setCanvasDimensions(width, height);
+          layerW = width;
+          layerH = height;
+          layerX = 0;
+          layerY = 0;
+        } else {
+          // If adding an additional image on top of existing photo:
+          // Preserve its exact aspect ratio, scale gracefully to fit inside canvas
+          const curW = useEditorStore.getState().canvasWidth;
+          const curH = useEditorStore.getState().canvasHeight;
+          const maxDim = Math.min(curW, curH) * 0.75;
+          const scale = Math.min(1, maxDim / Math.max(width, height));
+          layerW = Math.round(width * scale);
+          layerH = Math.round(height * scale);
+          layerX = Math.round((curW - layerW) / 2);
+          layerY = Math.round((curH - layerH) / 2);
         }
 
         const newLayer: ImageLayer = {
           id: 'img_' + Date.now() + '_' + i,
-          name: file.name.substring(0, 24) || `Ảnh ${layers.length + 1}`,
+          name: file.name.substring(0, 24) || `Ảnh ${currentLayers.length + 1}`,
           type: 'image',
           visible: true,
           locked: false,
@@ -146,10 +189,10 @@ export default function App() {
           src: dataUrl,
           originalWidth: width,
           originalHeight: height,
-          x: 0,
-          y: 0,
-          width: layers.length === 0 ? width : Math.min(width, canvasWidth),
-          height: layers.length === 0 ? height : Math.min(height, canvasHeight),
+          x: layerX,
+          y: layerY,
+          width: layerW,
+          height: layerH,
           rotation: 0,
           scaleX: 1,
           scaleY: 1,
@@ -199,12 +242,35 @@ export default function App() {
         if (!file.type.startsWith('image/')) continue;
         try {
           const { dataUrl, width, height } = await downscaleImageIfNeeded(file);
-          if (layers.length === 0 && i === 0) {
+          const currentLayers = useEditorStore.getState().layers;
+          const existingImages = currentLayers.filter((l) => l.type === 'image');
+          const isPrimaryImage = existingImages.length === 0 && i === 0;
+
+          let layerW = width;
+          let layerH = height;
+          let layerX = 0;
+          let layerY = 0;
+
+          if (isPrimaryImage) {
             setCanvasDimensions(width, height);
+            layerW = width;
+            layerH = height;
+            layerX = 0;
+            layerY = 0;
+          } else {
+            const curW = useEditorStore.getState().canvasWidth;
+            const curH = useEditorStore.getState().canvasHeight;
+            const maxDim = Math.min(curW, curH) * 0.75;
+            const scale = Math.min(1, maxDim / Math.max(width, height));
+            layerW = Math.round(width * scale);
+            layerH = Math.round(height * scale);
+            layerX = Math.round((curW - layerW) / 2);
+            layerY = Math.round((curH - layerH) / 2);
           }
+
           const newLayer: ImageLayer = {
             id: 'img_' + Date.now() + '_' + i,
-            name: file.name.substring(0, 24) || `Ảnh ${layers.length + 1}`,
+            name: file.name.substring(0, 24) || `Ảnh ${currentLayers.length + 1}`,
             type: 'image',
             visible: true,
             locked: false,
@@ -213,10 +279,10 @@ export default function App() {
             src: dataUrl,
             originalWidth: width,
             originalHeight: height,
-            x: 0,
-            y: 0,
-            width: layers.length === 0 ? width : Math.min(width, canvasWidth),
-            height: layers.length === 0 ? height : Math.min(height, canvasHeight),
+            x: layerX,
+            y: layerY,
+            width: layerW,
+            height: layerH,
             rotation: 0,
             scaleX: 1,
             scaleY: 1,
@@ -253,7 +319,7 @@ export default function App() {
       window.removeEventListener('dragover', handleDragOver);
       window.removeEventListener('drop', handleDrop);
     };
-  }, [layers.length, canvasWidth, canvasHeight, setCanvasDimensions, addLayer]);
+  }, [setCanvasDimensions, addLayer]);
 
   // Keyboard shortcuts (Undo, Redo, Delete, Escape)
   useEffect(() => {
@@ -307,7 +373,7 @@ export default function App() {
   };
 
   return (
-    <div className="flex flex-col w-screen h-screen bg-slate-950 text-slate-100 overflow-hidden select-none font-sans">
+    <div className="flex flex-col w-full h-[100dvh] max-h-[100dvh] bg-slate-950 text-slate-100 overflow-hidden select-none font-sans">
       {/* Hidden File Input for Single / Multi image import */}
       <input
         ref={fileInputRef}
