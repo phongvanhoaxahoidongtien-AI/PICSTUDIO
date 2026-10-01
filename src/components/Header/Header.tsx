@@ -17,8 +17,13 @@ import {
   Maximize,
   Edit2,
   Layers,
+  ArrowLeft,
+  AlertTriangle,
+  X,
+  Save,
 } from 'lucide-react';
 import { useEditorStore } from '../../stores/editorStore';
+import { saveProject } from '../../services/db';
 import { PWAInstallButton } from '../PWA/PWAInstallButton';
 
 interface HeaderProps {
@@ -29,6 +34,7 @@ interface HeaderProps {
 
 export const Header: React.FC<HeaderProps> = ({ onOpenProjects, onOpenExport, onOpenCamera }) => {
   const {
+    projectId,
     projectName,
     setProjectName,
     undo,
@@ -40,16 +46,21 @@ export const Header: React.FC<HeaderProps> = ({ onOpenProjects, onOpenExport, on
     setPan,
     canvasWidth,
     canvasHeight,
+    canvasBackgroundColor,
     theme,
     toggleTheme,
     isBeforeAfterActive,
     setIsBeforeAfterActive,
     layers,
+    resetProject,
+    activeTool,
+    setActiveTool,
   } = useEditorStore();
 
   const [isEditingName, setIsEditingName] = useState(false);
   const [tempName, setTempName] = useState(projectName);
   const [isMenuOpen, setIsMenuOpen] = useState(false);
+  const [isDiscardModalOpen, setIsDiscardModalOpen] = useState(false);
   const menuRef = useRef<HTMLDivElement>(null);
 
   // Close menu when clicking outside
@@ -71,6 +82,30 @@ export const Header: React.FC<HeaderProps> = ({ onOpenProjects, onOpenExport, on
       setProjectName(tempName.trim());
     } else {
       setTempName(projectName);
+    }
+  };
+
+  const handleSaveAndDiscard = async () => {
+    try {
+      const canvas = document.querySelector('canvas') as HTMLCanvasElement | null;
+      const thumbnail = canvas ? canvas.toDataURL('image/jpeg', 0.5) : '';
+      await saveProject({
+        id: projectId,
+        name: projectName,
+        width: canvasWidth,
+        height: canvasHeight,
+        backgroundColor: canvasBackgroundColor,
+        layers: layers,
+        thumbnail,
+        createdAt: Date.now(),
+        updatedAt: Date.now(),
+      });
+    } catch (err) {
+      console.error('Save before discard failed:', err);
+    } finally {
+      setIsDiscardModalOpen(false);
+      resetProject();
+      window.dispatchEvent(new CustomEvent('lumix:fit-to-screen'));
     }
   };
 
@@ -98,18 +133,61 @@ export const Header: React.FC<HeaderProps> = ({ onOpenProjects, onOpenExport, on
           paddingLeft: 'max(0.5rem, env(safe-area-inset-left, 0px))',
           paddingRight: 'max(0.5rem, env(safe-area-inset-right, 0px))',
         }}
-        className="w-full h-12 sm:h-14 flex items-center justify-between gap-1 sm:gap-2 px-1.5 sm:px-3"
+        className="w-full h-11 sm:h-12 flex items-center justify-between gap-1 sm:gap-2 px-1.5 sm:px-3"
       >
-        {/* Left: Project Library & Title */}
+        {/* Left: Exit/Discard Button & Project Library & Title */}
         <div className="flex items-center gap-1 sm:gap-1.5 min-w-0 shrink">
-          <button
-            onClick={onOpenProjects}
-            className="flex items-center gap-1 p-1.5 sm:px-2.5 sm:py-1.5 rounded-xl bg-slate-800/80 hover:bg-slate-750 border border-slate-700/60 text-slate-200 transition active:scale-95 text-xs font-semibold shrink-0"
-            title="Mở thư viện dự án (IndexedDB)"
-          >
-            <FolderOpen className="w-4 h-4 text-indigo-400" />
-            <span className="hidden xs:inline">Dự án</span>
-          </button>
+          {/* Nút Quay lại khi đang trong công cụ chỉnh sửa */}
+          {activeTool !== 'none' ? (
+            <button
+              onClick={() => setActiveTool('none')}
+              className="flex items-center gap-1 px-2 py-1 sm:px-2.5 sm:py-1.5 rounded-xl bg-indigo-500/20 hover:bg-indigo-500/30 text-indigo-300 border border-indigo-500/40 transition active:scale-95 text-xs font-semibold shrink-0 shadow-sm"
+              title="Quay lại / Đóng công cụ đang sửa"
+            >
+              <ArrowLeft className="w-3.5 h-3.5" />
+              <span>Quay lại</span>
+            </button>
+          ) : layers.length > 0 ? (
+            <button
+              onClick={() => setIsDiscardModalOpen(true)}
+              className="flex items-center gap-1 px-2 py-1 sm:px-2.5 sm:py-1.5 rounded-xl bg-rose-500/15 hover:bg-rose-500/25 text-rose-300 border border-rose-500/30 transition active:scale-95 text-xs font-semibold shrink-0 shadow-sm"
+              title="Quay lại hoặc hủy chỉnh sửa dự án hiện tại"
+            >
+              <ArrowLeft className="w-3.5 h-3.5" />
+              <span>Hủy / Thoát</span>
+            </button>
+          ) : (
+            <button
+              onClick={onOpenProjects}
+              className="flex items-center gap-1 p-1.5 sm:px-2.5 sm:py-1.5 rounded-xl bg-slate-800/80 hover:bg-slate-750 border border-slate-700/60 text-slate-200 transition active:scale-95 text-xs font-semibold shrink-0"
+              title="Mở thư viện dự án (IndexedDB)"
+            >
+              <FolderOpen className="w-4 h-4 text-indigo-400" />
+              <span className="hidden xs:inline">Dự án</span>
+            </button>
+          )}
+
+          {/* Quick Discard button when active tool is open */}
+          {activeTool !== 'none' && layers.length > 0 && (
+            <button
+              onClick={() => setIsDiscardModalOpen(true)}
+              className="hidden xs:flex items-center gap-1 px-1.5 py-1 sm:px-2 sm:py-1.5 rounded-xl bg-rose-500/15 hover:bg-rose-500/25 text-rose-300 border border-rose-500/30 transition active:scale-95 text-xs font-medium shrink-0"
+              title="Hủy bỏ dự án & quay về ban đầu"
+            >
+              <X className="w-3 h-3 text-rose-400" />
+              <span className="text-[11px]">Hủy ảnh</span>
+            </button>
+          )}
+
+          {layers.length > 0 && (
+            <button
+              onClick={onOpenProjects}
+              className="hidden sm:flex items-center gap-1 p-1.5 rounded-xl bg-slate-800/60 hover:bg-slate-750 border border-slate-700/50 text-slate-300 transition active:scale-95 text-xs shrink-0"
+              title="Mở danh sách dự án"
+            >
+              <FolderOpen className="w-3.5 h-3.5 text-indigo-400" />
+            </button>
+          )}
 
           {/* Project Name (Truncated cleanly on mobile) */}
           <div className="flex items-center min-w-0">
@@ -129,7 +207,7 @@ export const Header: React.FC<HeaderProps> = ({ onOpenProjects, onOpenExport, on
                   setTempName(projectName);
                   setIsEditingName(true);
                 }}
-                className="text-xs font-semibold text-slate-200 hover:text-white truncate max-w-[60px] xs:max-w-[95px] sm:max-w-[160px] text-left px-1 py-0.5 rounded hover:bg-slate-800/50 transition"
+                className="text-xs font-semibold text-slate-200 hover:text-white truncate max-w-[55px] xs:max-w-[90px] sm:max-w-[150px] text-left px-1 py-0.5 rounded hover:bg-slate-800/50 transition"
                 title="Nhấn để đổi tên dự án"
               >
                 {projectName}
@@ -319,6 +397,20 @@ export const Header: React.FC<HeaderProps> = ({ onOpenProjects, onOpenExport, on
                   <span>Đổi tên dự án</span>
                 </button>
 
+                {/* Discard Project Option in Mobile Menu */}
+                {layers.length > 0 && (
+                  <button
+                    onClick={() => {
+                      setIsMenuOpen(false);
+                      setIsDiscardModalOpen(true);
+                    }}
+                    className="w-full flex items-center gap-2.5 px-2.5 py-2 rounded-xl hover:bg-rose-950/40 text-rose-300 text-left transition"
+                  >
+                    <AlertTriangle className="w-4 h-4 text-rose-400 shrink-0" />
+                    <span>Hủy bỏ & Thoát dự án</span>
+                  </button>
+                )}
+
                 {/* PWA Install wrapper in Mobile Menu */}
                 <div className="pt-1 border-t border-slate-800 mt-1">
                   <div onClick={() => setIsMenuOpen(false)}>
@@ -330,6 +422,53 @@ export const Header: React.FC<HeaderProps> = ({ onOpenProjects, onOpenExport, on
           </div>
         </div>
       </div>
+
+      {/* Discard Project Confirmation Modal */}
+      {isDiscardModalOpen && (
+        <div className="fixed inset-0 bg-black/80 backdrop-blur-sm z-50 flex items-center justify-center p-4 animate-in fade-in duration-150">
+          <div className="bg-slate-900 border border-slate-700/80 rounded-3xl p-5 max-w-sm w-full shadow-2xl text-center space-y-4 animate-in zoom-in-95 duration-150">
+            <div className="w-12 h-12 rounded-2xl bg-rose-500/20 text-rose-400 mx-auto flex items-center justify-center shadow-lg shadow-rose-500/10">
+              <AlertTriangle className="w-6 h-6" />
+            </div>
+            <div>
+              <h3 className="text-base font-bold text-white mb-1.5">Hủy bỏ chỉnh sửa?</h3>
+              <p className="text-xs text-slate-300 leading-relaxed">
+                Bạn có chắc muốn thoát dự án đang chỉnh sửa không? Bạn có thể lưu lại vào thư viện trước khi thoát hoặc hủy bỏ hoàn toàn.
+              </p>
+            </div>
+            <div className="flex flex-col gap-2 pt-1">
+              <div className="flex gap-2">
+                <button
+                  type="button"
+                  onClick={() => setIsDiscardModalOpen(false)}
+                  className="flex-1 py-2.5 rounded-xl bg-slate-800 hover:bg-slate-700 text-slate-200 text-xs font-semibold transition active:scale-95 border border-slate-700"
+                >
+                  Tiếp tục sửa
+                </button>
+                <button
+                  type="button"
+                  onClick={() => {
+                    setIsDiscardModalOpen(false);
+                    resetProject();
+                    window.dispatchEvent(new CustomEvent('lumix:fit-to-screen'));
+                  }}
+                  className="flex-1 py-2.5 rounded-xl bg-gradient-to-r from-rose-600 to-rose-500 hover:from-rose-500 hover:to-rose-600 text-white text-xs font-bold transition active:scale-95 shadow-lg shadow-rose-600/30"
+                >
+                  Hủy & Thoát
+                </button>
+              </div>
+              <button
+                type="button"
+                onClick={handleSaveAndDiscard}
+                className="w-full py-2.5 rounded-xl bg-indigo-600/20 hover:bg-indigo-600/30 text-indigo-300 text-xs font-semibold border border-indigo-500/40 transition active:scale-95 flex items-center justify-center gap-1.5 shadow-sm"
+              >
+                <Save className="w-3.5 h-3.5 text-indigo-400" />
+                <span>Lưu vào thư viện rồi Thoát</span>
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
     </header>
   );
 };

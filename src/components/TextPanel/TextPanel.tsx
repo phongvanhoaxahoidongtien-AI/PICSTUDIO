@@ -85,7 +85,7 @@ export const TextPanel: React.FC = () => {
   };
 
   return (
-    <div className="bg-slate-900/95 border-t border-slate-800 p-3 sm:p-4 max-h-[48vh] overflow-y-auto select-none backdrop-blur-md">
+    <div className="bg-slate-900/95 border-t border-slate-800 p-3 sm:p-4 shrink-0 max-h-[35dvh] sm:max-h-[40dvh] overflow-y-auto select-none backdrop-blur-md">
       {/* Header */}
       <div className="flex items-center justify-between mb-3">
         <div className="flex items-center gap-2">

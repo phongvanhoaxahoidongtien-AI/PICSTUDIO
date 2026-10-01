@@ -60,7 +60,7 @@ export const BeautyPanel: React.FC = () => {
   };
 
   return (
-    <div className="bg-slate-900/95 dark:bg-slate-950/95 backdrop-blur-md border-t border-slate-800 max-h-[46vh] sm:max-h-[42vh] flex flex-col z-20 shadow-2xl select-none animate-in slide-in-from-bottom duration-200">
+    <div className="bg-slate-900/95 dark:bg-slate-950/95 backdrop-blur-md border-t border-slate-800 shrink-0 max-h-[35dvh] sm:max-h-[40dvh] flex flex-col z-20 shadow-2xl select-none animate-in slide-in-from-bottom duration-200">
       {/* Top Header of Panel */}
       <div className="px-3 sm:px-4 py-2 border-b border-slate-800/80 flex items-center justify-between shrink-0">
         <div className="flex items-center gap-2">
@@ -168,7 +168,7 @@ export const BeautyPanel: React.FC = () => {
       </div>
 
       {/* Tab Content Body */}
-      <div className="flex-1 overflow-y-auto p-3 sm:p-4 space-y-4">
+      <div className="flex-1 min-h-0 overflow-y-auto p-3 sm:p-4 space-y-4">
         {/* Tab 1: 1-Tap Presets */}
         {activeTab === 'presets' && (
           <div className="grid grid-cols-2 sm:grid-cols-4 gap-2.5">

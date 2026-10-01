@@ -176,9 +176,9 @@ export const CropOverlay: React.FC<CropOverlayProps> = ({ onApplyCrop, onCancel 
   };
 
   return (
-    <div className="absolute inset-0 z-40 bg-slate-950/85 backdrop-blur-sm flex flex-col items-center justify-between p-3 select-none">
+    <div className="absolute inset-0 z-40 bg-slate-950/85 backdrop-blur-sm flex flex-col items-center justify-between p-2 sm:p-3 select-none overflow-hidden">
       {/* Top Toolbar: Ratios */}
-      <div className="w-full max-w-xl flex items-center justify-center gap-1.5 overflow-x-auto py-2 px-1 scrollbar-none">
+      <div className="w-full max-w-xl flex items-center justify-center gap-1.5 overflow-x-auto py-1 sm:py-2 px-1 scrollbar-none shrink-0">
         {aspectPresets.map((preset) => (
           <button
             key={preset.label}
@@ -199,7 +199,7 @@ export const CropOverlay: React.FC<CropOverlayProps> = ({ onApplyCrop, onCancel 
         ref={containerRef}
         onPointerMove={onPointerMove}
         onPointerUp={onPointerUp}
-        className="relative flex-1 w-full max-w-lg max-h-[60vh] flex items-center justify-center my-2 overflow-hidden touch-none"
+        className="relative flex-1 min-h-0 w-full max-w-lg max-h-[48dvh] sm:max-h-[58dvh] flex items-center justify-center my-1 sm:my-2 overflow-hidden touch-none"
       >
         {activeLayer && (
           <div

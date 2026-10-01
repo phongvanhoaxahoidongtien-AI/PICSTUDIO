@@ -452,7 +452,7 @@ export default function App() {
   };
 
   return (
-    <div className="flex flex-col w-full h-[100dvh] max-h-[100dvh] bg-slate-950 text-slate-100 overflow-hidden select-none font-sans">
+    <div className="fixed inset-0 w-full h-[100dvh] max-h-[100dvh] overflow-hidden flex flex-col bg-slate-950 text-slate-100 select-none font-sans">
       {/* Hidden File Input for Single / Multi image import */}
       <input
         ref={fileInputRef}
@@ -470,8 +470,8 @@ export default function App() {
         onOpenCamera={() => setAppMode('camera')}
       />
 
-      {/* Main Canvas Workspace */}
-      <main className="relative flex-1 w-full h-full flex items-center justify-center overflow-hidden">
+      {/* Main Canvas Workspace with min-h-0 to allow flex shrinking on iOS */}
+      <main className="relative flex-1 min-h-0 w-full flex items-center justify-center overflow-hidden">
         <CanvasEditor
           onOpenFilePicker={handleOpenFilePicker}
           onOpenCamera={() => setAppMode('camera')}

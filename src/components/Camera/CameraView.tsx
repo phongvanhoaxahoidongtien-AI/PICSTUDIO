@@ -12,11 +12,19 @@ import {
   Layers,
   AlertCircle,
   Scan,
+  Calendar,
+  Square,
+  Smartphone,
 } from 'lucide-react';
 import { BeautyLiveControls, type LiveBeautySettings } from './BeautyLiveControls';
 import { detectFaces } from '../../utils/faceDetection';
 import { applyAdjustments } from '../../utils/imageProcessing';
 import { FILTER_PRESETS } from '../../utils/filters';
+import {
+  applySnowFilter,
+  drawSnowArSticker,
+  drawSnowTimestamp,
+} from '../../utils/snowCameraEffects';
 import type { DetectedFace } from '../../types';
 
 interface CameraViewProps {
@@ -45,12 +53,19 @@ export const CameraView: React.FC<CameraViewProps> = ({
   const [cameraError, setCameraError] = useState<string | null>(null);
   const [isLoading, setIsLoading] = useState(true);
 
+  // SNOW Camera Extra Features
+  const [aspectRatio, setAspectRatio] = useState<'3:4' | '9:16' | '1:1'>('3:4');
+  const [isTimestampOn, setIsTimestampOn] = useState(true);
+
   // Live Beauty & Filter state
   const [liveBeauty, setLiveBeauty] = useState<LiveBeautySettings>({
     smooth: 35,
     whiten: 20,
     glow: 20,
+    slimFace: 20,
     filterId: 'normal',
+    snowFilter: 'snow_peach',
+    arEffect: 'none',
     presetId: 'natural',
   });
   const [isBeautyControlsOpen, setIsBeautyControlsOpen] = useState(false);
@@ -80,7 +95,7 @@ export const CameraView: React.FC<CameraViewProps> = ({
       osc.start();
       osc.stop(ctx.currentTime + 0.09);
     } catch {
-      // AudioContext unavailable or restricted by browser
+      // AudioContext unavailable
     }
   }, []);
 
@@ -166,7 +181,12 @@ export const CameraView: React.FC<CameraViewProps> = ({
     setFacingMode((prev) => (prev === 'user' ? 'environment' : 'user'));
   };
 
-  // Real-time Video to Canvas Render Loop with Live Beauty & Filters
+  // Toggle Aspect Ratio: 3:4 -> 9:16 -> 1:1
+  const toggleAspectRatio = () => {
+    setAspectRatio((prev) => (prev === '3:4' ? '9:16' : prev === '9:16' ? '1:1' : '3:4'));
+  };
+
+  // Real-time Video to Canvas Render Loop with Live SNOW Beauty, Filters & AR Stickers
   useEffect(() => {
     let animId: number;
 
@@ -178,9 +198,53 @@ export const CameraView: React.FC<CameraViewProps> = ({
         const vW = video.videoWidth || 640;
         const vH = video.videoHeight || 480;
 
-        if (canvas.width !== vW || canvas.height !== vH) {
-          canvas.width = vW;
-          canvas.height = vH;
+        // Calculate aspect ratio crop rectangle
+        let sx = 0, sy = 0, sWidth = vW, sHeight = vH;
+        let targetW = vW, targetH = vH;
+
+        if (aspectRatio === '1:1') {
+          const minDim = Math.min(vW, vH);
+          sx = Math.round((vW - minDim) / 2);
+          sy = Math.round((vH - minDim) / 2);
+          sWidth = minDim;
+          sHeight = minDim;
+          targetW = minDim;
+          targetH = minDim;
+        } else if (aspectRatio === '3:4') {
+          const targetRatio = 3 / 4;
+          if (vW / vH > targetRatio) {
+            sWidth = Math.round(vH * targetRatio);
+            sHeight = vH;
+            sx = Math.round((vW - sWidth) / 2);
+            sy = 0;
+          } else {
+            sWidth = vW;
+            sHeight = Math.round(vW / targetRatio);
+            sx = 0;
+            sy = Math.round((vH - sHeight) / 2);
+          }
+          targetW = sWidth;
+          targetH = sHeight;
+        } else if (aspectRatio === '9:16') {
+          const targetRatio = 9 / 16;
+          if (vW / vH > targetRatio) {
+            sWidth = Math.round(vH * targetRatio);
+            sHeight = vH;
+            sx = Math.round((vW - sWidth) / 2);
+            sy = 0;
+          } else {
+            sWidth = vW;
+            sHeight = Math.round(vW / targetRatio);
+            sx = 0;
+            sy = Math.round((vH - sHeight) / 2);
+          }
+          targetW = sWidth;
+          targetH = sHeight;
+        }
+
+        if (canvas.width !== targetW || canvas.height !== targetH) {
+          canvas.width = targetW;
+          canvas.height = targetH;
         }
 
         const ctx = canvas.getContext('2d');
@@ -189,42 +253,45 @@ export const CameraView: React.FC<CameraViewProps> = ({
 
           // Mirror front camera for natural selfie view
           if (facingMode === 'user') {
-            ctx.translate(vW, 0);
+            ctx.translate(targetW, 0);
             ctx.scale(-1, 1);
           }
 
-          // Draw base video frame
-          ctx.drawImage(video, 0, 0, vW, vH);
+          // Draw cropped base video frame
+          ctx.drawImage(video, sx, sy, sWidth, sHeight, 0, 0, targetW, targetH);
           ctx.restore();
 
-          // Fast live beauty pass (Whitening + Soft Glow + Live Skin Smooth)
+          // 1. Fast live beauty pass (Whitening + Soft Glow + Live Skin Smooth)
           if (liveBeauty.whiten > 0 || liveBeauty.glow > 0 || liveBeauty.smooth > 0) {
             ctx.save();
-            // Whiten & Soft Glow via screen blend overlay
             if (liveBeauty.whiten > 0 || liveBeauty.glow > 0) {
               const whitenAlpha = (liveBeauty.whiten / 100) * 0.22;
               const glowAlpha = (liveBeauty.glow / 100) * 0.18;
               ctx.globalCompositeOperation = 'screen';
               ctx.fillStyle = `rgba(255, 245, 245, ${(whitenAlpha + glowAlpha).toFixed(2)})`;
-              ctx.fillRect(0, 0, vW, vH);
+              ctx.fillRect(0, 0, targetW, targetH);
             }
 
-            // Skin smoothing simulation on live preview
             if (liveBeauty.smooth > 0) {
               const smoothAlpha = (liveBeauty.smooth / 100) * 0.35;
               ctx.globalCompositeOperation = 'soft-light';
               ctx.globalAlpha = smoothAlpha;
-              ctx.filter = `blur(${Math.max(2, Math.round(vW / 350))}px)`;
+              ctx.filter = `blur(${Math.max(2, Math.round(targetW / 350))}px)`;
               ctx.drawImage(canvas, 0, 0);
             }
             ctx.restore();
           }
 
-          // Live Color Filter
+          // 2. SNOW Live Color Filters
+          if (liveBeauty.snowFilter && liveBeauty.snowFilter !== 'none') {
+            applySnowFilter(ctx, targetW, targetH, liveBeauty.snowFilter);
+          }
+
+          // 3. Generic Filters Preset
           if (liveBeauty.filterId !== 'normal') {
             const preset = FILTER_PRESETS.find((f) => f.id === liveBeauty.filterId);
             if (preset) {
-              applyAdjustments(ctx, vW, vH, {
+              applyAdjustments(ctx, targetW, targetH, {
                 brightness: preset.adjustments.brightness || 0,
                 contrast: preset.adjustments.contrast || 0,
                 saturation: preset.adjustments.saturation || 0,
@@ -243,11 +310,21 @@ export const CameraView: React.FC<CameraViewProps> = ({
             }
           }
 
+          // 4. Live SNOW AR Face Stickers (anchored to face or center)
+          if (liveBeauty.arEffect && liveBeauty.arEffect !== 'none') {
+            drawSnowArSticker(ctx, targetW, targetH, liveBeauty.arEffect, detectedFaces[0]);
+          }
+
+          // 5. Classic SNOW Date/Timestamp Watermark
+          if (isTimestampOn) {
+            drawSnowTimestamp(ctx, targetW, targetH);
+          }
+
           // Periodic Face Detection (every 280ms)
           const now = Date.now();
           if (now - lastDetectTimeRef.current > 280) {
             lastDetectTimeRef.current = now;
-            detectFaces(canvas, vW, vH)
+            detectFaces(canvas, targetW, targetH)
               .then((faces) => setDetectedFaces(faces))
               .catch(() => {});
           }
@@ -259,7 +336,7 @@ export const CameraView: React.FC<CameraViewProps> = ({
 
     animId = requestAnimationFrame(renderFrame);
     return () => cancelAnimationFrame(animId);
-  }, [facingMode, liveBeauty]);
+  }, [facingMode, liveBeauty, aspectRatio, isTimestampOn, detectedFaces]);
 
   // Capture Trigger with Timer and Sound
   const triggerCapture = () => {
@@ -305,7 +382,7 @@ export const CameraView: React.FC<CameraViewProps> = ({
   };
 
   return (
-    <div className="fixed inset-0 w-full h-full bg-black z-50 flex flex-col justify-between select-none overflow-hidden font-sans">
+    <div className="fixed inset-0 w-full h-[100dvh] max-h-[100dvh] bg-black z-50 flex flex-col justify-between select-none overflow-hidden font-sans">
       {/* Hidden Video Feed Source */}
       <video
         ref={videoRef}
@@ -323,11 +400,11 @@ export const CameraView: React.FC<CameraViewProps> = ({
       {/* Top Floating Controls Bar */}
       <div
         style={{
-          paddingTop: 'calc(0.75rem + env(safe-area-inset-top, 0px))',
+          paddingTop: 'calc(0.5rem + env(safe-area-inset-top, 0px))',
           paddingLeft: 'max(0.75rem, env(safe-area-inset-left, 0px))',
           paddingRight: 'max(0.75rem, env(safe-area-inset-right, 0px))',
         }}
-        className="relative z-30 px-3 sm:px-4 pb-3 flex items-center justify-between bg-gradient-to-b from-black/80 via-black/40 to-transparent"
+        className="relative z-30 px-3 sm:px-4 pb-2.5 flex items-center justify-between bg-gradient-to-b from-black/85 via-black/40 to-transparent"
       >
         {/* Back to Editor */}
         <button
@@ -339,7 +416,30 @@ export const CameraView: React.FC<CameraViewProps> = ({
         </button>
 
         {/* Center Top Controls */}
-        <div className="flex items-center gap-2">
+        <div className="flex items-center gap-1.5 sm:gap-2">
+          {/* Aspect Ratio Toggle (3:4, 9:16, 1:1) */}
+          <button
+            onClick={toggleAspectRatio}
+            className="flex items-center gap-1 px-2.5 py-1.5 rounded-full bg-black/50 backdrop-blur-md border border-white/20 text-white text-xs font-mono font-bold hover:bg-black/70 active:scale-95 transition"
+            title="Đổi tỉ lệ khung hình (3:4, 9:16, 1:1)"
+          >
+            <span>{aspectRatio}</span>
+          </button>
+
+          {/* SNOW Timestamp Watermark Toggle */}
+          <button
+            onClick={() => setIsTimestampOn((t) => !t)}
+            className={`flex items-center gap-1 px-2.5 py-1.5 rounded-full backdrop-blur-md border text-xs font-semibold transition active:scale-95 ${
+              isTimestampOn
+                ? 'bg-amber-500/90 border-amber-400 text-slate-950 font-bold shadow-md shadow-amber-500/20'
+                : 'bg-black/50 border-white/20 text-slate-300 hover:text-white'
+            }`}
+            title="Dấu ngày giờ phong cách máy ảnh cổ điển SNOW"
+          >
+            <Calendar className="w-3.5 h-3.5" />
+            <span className="hidden xs:inline">Ngày giờ</span>
+          </button>
+
           {/* Torch / Flash */}
           {hasTorch && (
             <button
@@ -396,7 +496,7 @@ export const CameraView: React.FC<CameraViewProps> = ({
       </div>
 
       {/* Main Viewport & Canvas */}
-      <div className="relative flex-1 w-full h-full flex items-center justify-center overflow-hidden">
+      <div className="relative flex-1 w-full h-full flex items-center justify-center overflow-hidden bg-black">
         {cameraError ? (
           <div className="p-6 max-w-sm mx-auto bg-slate-900/90 border border-slate-800 rounded-2xl text-center text-white space-y-3 z-30">
             <div className="p-3 w-12 h-12 rounded-full bg-rose-500/20 text-rose-400 mx-auto flex items-center justify-center">
@@ -428,10 +528,16 @@ export const CameraView: React.FC<CameraViewProps> = ({
           </div>
         ) : (
           <div className="relative w-full h-full flex items-center justify-center">
-            {/* Live Camera Canvas */}
+            {/* Live Camera Canvas with dynamic aspect ratio */}
             <canvas
               ref={canvasRef}
-              className="w-full h-full object-cover max-h-screen"
+              className={`max-h-full max-w-full block shadow-2xl transition-all duration-300 ${
+                aspectRatio === '1:1'
+                  ? 'aspect-square object-contain'
+                  : aspectRatio === '9:16'
+                  ? 'aspect-[9/16] object-contain'
+                  : 'aspect-[3/4] object-contain'
+              }`}
             />
 
             {/* Grid 3x3 Overlay */}
@@ -443,8 +549,8 @@ export const CameraView: React.FC<CameraViewProps> = ({
                 <div className="border-r border-b border-white/20" />
                 <div className="border-r border-b border-white/20" />
                 <div className="border-b border-white/20" />
-                <div className="border-r border-white/20" />
-                <div className="border-r border-white/20" />
+                <div className="border-r border-b border-white/20" />
+                <div className="border-r border-b border-white/20" />
                 <div />
               </div>
             )}
@@ -454,7 +560,6 @@ export const CameraView: React.FC<CameraViewProps> = ({
               const canvas = canvasRef.current;
               if (!canvas || canvas.width === 0 || canvas.height === 0) return null;
 
-              // Calculate relative percentages
               const leftPct = (face.x / canvas.width) * 100;
               const topPct = (face.y / canvas.height) * 100;
               const widthPct = (face.width / canvas.width) * 100;
@@ -471,18 +576,15 @@ export const CameraView: React.FC<CameraViewProps> = ({
                   }}
                   className="absolute pointer-events-none z-20 transition-all duration-150 ease-out"
                 >
-                  {/* Glowing Reticle Frame */}
-                  <div className="w-full h-full border border-pink-400/70 rounded-2xl relative shadow-lg shadow-pink-500/20">
-                    {/* Corner Reticle Accents */}
+                  <div className="w-full h-full border border-pink-400/80 rounded-2xl relative shadow-lg shadow-pink-500/25">
                     <div className="absolute -top-1 -left-1 w-4 h-4 border-t-2 border-l-2 border-pink-400" />
                     <div className="absolute -top-1 -right-1 w-4 h-4 border-t-2 border-r-2 border-pink-400" />
                     <div className="absolute -bottom-1 -left-1 w-4 h-4 border-b-2 border-l-2 border-pink-400" />
                     <div className="absolute -bottom-1 -right-1 w-4 h-4 border-b-2 border-r-2 border-pink-400" />
 
-                    {/* Reticle Focus Tag */}
-                    <div className="absolute -top-6 left-1/2 -translate-x-1/2 px-2 py-0.5 bg-black/60 backdrop-blur-md rounded-full text-[10px] font-bold text-pink-300 flex items-center gap-1 border border-pink-500/40">
+                    <div className="absolute -top-6 left-1/2 -translate-x-1/2 px-2 py-0.5 bg-black/70 backdrop-blur-md rounded-full text-[10px] font-bold text-pink-300 flex items-center gap-1 border border-pink-500/40">
                       <Scan className="w-2.5 h-2.5" />
-                      <span>Beauty Focus</span>
+                      <span>SNOW Face</span>
                     </div>
                   </div>
                 </div>
@@ -491,7 +593,7 @@ export const CameraView: React.FC<CameraViewProps> = ({
 
             {/* Big Countdown Number Display */}
             {countdown !== null && (
-              <div className="absolute inset-0 flex items-center justify-center z-40 bg-black/30 backdrop-blur-xs">
+              <div className="absolute inset-0 flex items-center justify-center z-40 bg-black/40 backdrop-blur-xs">
                 <span className="text-8xl sm:text-9xl font-black text-white drop-shadow-2xl animate-ping duration-1000">
                   {countdown}
                 </span>
@@ -504,11 +606,11 @@ export const CameraView: React.FC<CameraViewProps> = ({
       {/* Bottom Camera Controls & Shutter */}
       <div
         style={{
-          paddingBottom: 'calc(1.25rem + env(safe-area-inset-bottom, 0px))',
+          paddingBottom: 'calc(1rem + env(safe-area-inset-bottom, 0px))',
           paddingLeft: 'max(1rem, env(safe-area-inset-left, 0px))',
           paddingRight: 'max(1rem, env(safe-area-inset-right, 0px))',
         }}
-        className="relative z-30 px-4 pt-2 bg-gradient-to-t from-black via-black/80 to-transparent flex flex-col items-center"
+        className="relative z-30 px-4 pt-2 bg-gradient-to-t from-black via-black/85 to-transparent flex flex-col items-center"
       >
         {/* Floating Live Beauty & Filters Toolbar */}
         <BeautyLiveControls

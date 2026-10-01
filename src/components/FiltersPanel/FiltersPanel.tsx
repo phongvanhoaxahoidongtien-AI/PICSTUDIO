@@ -50,7 +50,7 @@ export const FiltersPanel: React.FC = () => {
   };
 
   return (
-    <div className="bg-slate-900/95 border-t border-slate-800 p-3 sm:p-4 max-h-[46vh] overflow-y-auto select-none backdrop-blur-md">
+    <div className="bg-slate-900/95 border-t border-slate-800 p-3 sm:p-4 shrink-0 max-h-[35dvh] sm:max-h-[40dvh] overflow-y-auto select-none backdrop-blur-md">
       {/* Header with Intensity Slider */}
       <div className="flex flex-col gap-2.5 mb-3">
         <div className="flex items-center justify-between">

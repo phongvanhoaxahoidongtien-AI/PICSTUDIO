@@ -50,7 +50,7 @@ export const BottomNav: React.FC<BottomNavProps> = ({ onOpenFilePicker, onOpenCa
           paddingLeft: 'max(0.5rem, env(safe-area-inset-left, 0px))',
           paddingRight: 'max(0.5rem, env(safe-area-inset-right, 0px))',
         }}
-        className="h-14 flex items-center gap-1 sm:gap-2 overflow-x-auto w-full justify-start sm:justify-center py-1 scrollbar-none"
+        className="h-13 sm:h-14 flex items-center gap-1 sm:gap-2 overflow-x-auto w-full justify-start sm:justify-center py-0.5 sm:py-1 scrollbar-none"
       >
         {/* Quick Camera Capture Button */}
         {onOpenCamera && (
