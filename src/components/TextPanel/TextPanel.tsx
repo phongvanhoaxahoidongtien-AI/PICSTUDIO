@@ -2,6 +2,7 @@ import React, { useState } from 'react';
 import {
   Type,
   Plus,
+  Minus,
   Bold,
   Italic,
   AlignLeft,
@@ -229,21 +230,85 @@ export const TextPanel: React.FC = () => {
               </button>
             </div>
 
-            {/* Font Size */}
-            <div className="flex items-center gap-2 flex-1 min-w-[140px]">
-              <span className="text-xs text-slate-400">Cỡ chữ:</span>
+            {/* Font Size with Quick Shrink & Enlarge Buttons */}
+            <div className="flex items-center gap-1.5 flex-1 min-w-[200px]">
+              <span className="text-xs text-slate-400 shrink-0">Cỡ chữ:</span>
+              <button
+                type="button"
+                onClick={() => {
+                  const newSize = Math.max(12, activeLayer.fontSize - 4);
+                  updateActiveText({
+                    fontSize: newSize,
+                    height: Math.max(activeLayer.height, Math.round(newSize * 1.3)),
+                  });
+                }}
+                className="w-6 h-6 rounded-lg bg-slate-800 hover:bg-slate-700 text-slate-300 hover:text-white flex items-center justify-center text-xs font-bold active:scale-90 transition border border-slate-700"
+                title="Thu nhỏ chữ (-4px)"
+              >
+                <Minus className="w-3 h-3" />
+              </button>
               <input
                 type="range"
-                min="16"
-                max="140"
+                min="14"
+                max="160"
                 value={activeLayer.fontSize}
-                onChange={(e) => updateActiveText({ fontSize: Number(e.target.value) })}
+                onChange={(e) => {
+                  const newSize = Number(e.target.value);
+                  updateActiveText({
+                    fontSize: newSize,
+                    height: Math.max(activeLayer.height, Math.round(newSize * 1.3)),
+                  });
+                }}
                 className="flex-1 h-2 bg-slate-800 rounded-lg appearance-none cursor-pointer accent-indigo-500"
               />
-              <span className="text-xs font-mono text-indigo-400 font-bold w-7 text-right">
-                {activeLayer.fontSize}
+              <button
+                type="button"
+                onClick={() => {
+                  const newSize = Math.min(200, activeLayer.fontSize + 4);
+                  updateActiveText({
+                    fontSize: newSize,
+                    height: Math.max(activeLayer.height, Math.round(newSize * 1.3)),
+                  });
+                }}
+                className="w-6 h-6 rounded-lg bg-slate-800 hover:bg-slate-700 text-slate-300 hover:text-white flex items-center justify-center text-xs font-bold active:scale-90 transition border border-slate-700"
+                title="Phóng to chữ (+4px)"
+              >
+                <Plus className="w-3 h-3" />
+              </button>
+              <span className="text-xs font-mono text-indigo-400 font-bold w-8 text-right shrink-0">
+                {activeLayer.fontSize}px
               </span>
             </div>
+          </div>
+
+          {/* Quick Font Size Presets */}
+          <div className="flex items-center gap-1.5 overflow-x-auto scrollbar-none py-0.5">
+            <span className="text-[11px] text-slate-400 shrink-0">Cỡ nhanh:</span>
+            {[
+              { label: 'Nhỏ (24)', size: 24 },
+              { label: 'Vừa (36)', size: 36 },
+              { label: 'Chuẩn (48)', size: 48 },
+              { label: 'Lớn (64)', size: 64 },
+              { label: 'Siêu lớn (92)', size: 92 },
+            ].map((p) => (
+              <button
+                key={p.size}
+                type="button"
+                onClick={() => {
+                  updateActiveText({
+                    fontSize: p.size,
+                    height: Math.max(activeLayer.height, Math.round(p.size * 1.3)),
+                  });
+                }}
+                className={`px-2 py-0.5 rounded-lg text-[11px] font-medium transition shrink-0 ${
+                  activeLayer.fontSize === p.size
+                    ? 'bg-indigo-600 text-white font-bold shadow-sm'
+                    : 'bg-slate-800/80 text-slate-300 hover:text-white hover:bg-slate-700 border border-slate-700/60'
+                }`}
+              >
+                {p.label}
+              </button>
+            ))}
           </div>
 
           {/* Color Palettes */}

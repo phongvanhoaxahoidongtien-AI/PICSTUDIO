@@ -31,7 +31,7 @@ export const StickersPanel: React.FC = () => {
   });
 
   const handleAddSticker = (sticker: StickerItem) => {
-    const maxDim = Math.min(canvasWidth, canvasHeight) * 0.45;
+    const maxDim = Math.min(canvasWidth, canvasHeight) * 0.35;
     const initialScale = Math.min(1, maxDim / Math.max(sticker.defaultWidth, sticker.defaultHeight));
     const finalW = Math.round(sticker.defaultWidth * initialScale);
     const finalH = Math.round(sticker.defaultHeight * initialScale);

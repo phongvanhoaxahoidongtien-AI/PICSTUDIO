@@ -55,6 +55,7 @@ interface EditorState {
   layers: CanvasLayer[];
   activeLayerId: string | null;
   setActiveLayerId: (id: string | null) => void;
+  setSingleImage: (layer: ImageLayer, width: number, height: number, projectName?: string) => void;
   addLayer: (layer: CanvasLayer) => void;
   updateLayer: (id: string, updates: Partial<CanvasLayer>) => void;
   removeLayer: (id: string) => void;
@@ -212,6 +213,19 @@ export const useEditorStore = create<EditorState>((set, get) => ({
 
   canUndo: () => get().historyPast.length > 0,
   canRedo: () => get().historyFuture.length > 0,
+
+  setSingleImage: (layer, width, height, projectName) => {
+    get().pushHistory();
+    set({
+      canvasWidth: width,
+      canvasHeight: height,
+      layers: [layer],
+      activeLayerId: layer.id,
+      zoom: 1,
+      pan: { x: 0, y: 0 },
+      ...(projectName ? { projectName } : {}),
+    });
+  },
 
   addLayer: (layer) => {
     get().pushHistory();

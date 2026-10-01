@@ -84,6 +84,26 @@ export function applyAdjustments(
   intensity = 1.0 // 0 to 1
 ) {
   if (width <= 0 || height <= 0) return;
+
+  // Ultra-fast skip: If no adjustments are made, skip heavy getImageData loop entirely!
+  const hasAdjustments =
+    adjustments.brightness !== 0 ||
+    adjustments.contrast !== 0 ||
+    adjustments.saturation !== 0 ||
+    adjustments.exposure !== 0 ||
+    adjustments.highlights !== 0 ||
+    adjustments.shadows !== 0 ||
+    adjustments.temperature !== 0 ||
+    adjustments.tint !== 0 ||
+    adjustments.sharpness !== 0 ||
+    adjustments.vignette !== 0 ||
+    adjustments.clarity !== 0 ||
+    adjustments.blackPoint !== 0 ||
+    (adjustments.gamma !== undefined && adjustments.gamma !== 1.0) ||
+    (adjustments.whitePoint !== undefined && adjustments.whitePoint !== 255);
+
+  if (!hasAdjustments) return;
+
   const imgData = ctx.getImageData(0, 0, width, height);
   const data = imgData.data;
   const len = data.length;

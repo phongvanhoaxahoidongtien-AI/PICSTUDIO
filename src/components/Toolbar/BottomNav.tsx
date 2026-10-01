@@ -21,7 +21,10 @@ interface BottomNavProps {
 }
 
 export const BottomNav: React.FC<BottomNavProps> = ({ onOpenFilePicker, onOpenCamera }) => {
-  const { activeTool, setActiveTool } = useEditorStore();
+  const { activeTool, setActiveTool, layers } = useEditorStore();
+
+  const isMultiLayerMode = activeTool === 'layers' || activeTool === 'collage';
+  const hasImage = layers.some((l) => l.type === 'image');
 
   const tools: { id: ToolType; label: string; icon: React.ReactNode }[] = [
     { id: 'beauty', label: 'Làm đẹp', icon: <Heart className="w-5 h-5 text-pink-400" /> },
@@ -63,16 +66,24 @@ export const BottomNav: React.FC<BottomNavProps> = ({ onOpenFilePicker, onOpenCa
           </button>
         )}
 
-        {/* Quick Add Photo Button */}
+        {/* Quick Open/Change Photo or Add Layer Button */}
         <button
           onClick={onOpenFilePicker}
           className="flex flex-col items-center justify-center min-w-[56px] py-1 px-1.5 rounded-xl text-indigo-400 hover:text-indigo-300 hover:bg-indigo-950/30 transition shrink-0 active:scale-95"
-          title="Thêm ảnh mới từ máy"
+          title={
+            isMultiLayerMode
+              ? 'Thêm lớp ảnh mới (Ghép ảnh / Đa lớp)'
+              : hasImage
+              ? 'Đổi ảnh khác để chỉnh sửa đơn ảnh'
+              : 'Mở ảnh từ máy để chỉnh sửa'
+          }
         >
           <div className="p-1 rounded-lg bg-indigo-500/20 text-indigo-400">
             <ImagePlus className="w-4 h-4" />
           </div>
-          <span className="text-[10px] font-medium mt-0.5">Thêm ảnh</span>
+          <span className="text-[10px] font-medium mt-0.5">
+            {isMultiLayerMode ? 'Thêm lớp' : hasImage ? 'Đổi ảnh' : 'Mở ảnh'}
+          </span>
         </button>
 
         <div className="w-[1px] h-7 bg-slate-800 shrink-0 mx-0.5" />

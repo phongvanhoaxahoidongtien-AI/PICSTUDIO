@@ -33,6 +33,7 @@ export default function App() {
     activeTool,
     setActiveTool,
     layers,
+    setSingleImage,
     addLayer,
     updateLayer,
     setCanvasDimensions,
@@ -64,19 +65,15 @@ export default function App() {
     height: number,
     liveSettings?: LiveBeautySettings
   ) => {
-    const existingImages = layers.filter((l) => l.type === 'image');
-    const isPrimary = existingImages.length === 0;
+    const isMultiLayerMode = activeTool === 'layers' || activeTool === 'collage';
+    const timeStr = new Date().toLocaleTimeString('vi-VN', { hour: '2-digit', minute: '2-digit' });
 
     let layerW = width;
     let layerH = height;
     let layerX = 0;
     let layerY = 0;
 
-    if (isPrimary) {
-      setCanvasDimensions(width, height);
-      layerW = width;
-      layerH = height;
-    } else {
+    if (isMultiLayerMode && layers.length > 0) {
       const curW = canvasWidth;
       const curH = canvasHeight;
       const maxDim = Math.min(curW, curH) * 0.75;
@@ -87,7 +84,6 @@ export default function App() {
       layerY = Math.round((curH - layerH) / 2);
     }
 
-    const timeStr = new Date().toLocaleTimeString('vi-VN', { hour: '2-digit', minute: '2-digit' });
     const newLayer: ImageLayer = {
       id: 'img_' + Date.now() + '_cam',
       name: `Ảnh chụp ${timeStr}`,
@@ -133,9 +129,19 @@ export default function App() {
       filterIntensity: 100,
     };
 
-    addLayer(newLayer);
+    if (isMultiLayerMode) {
+      addLayer(newLayer);
+    } else {
+      // Default Single Image Mode (iOS/Android native style: 100% natural resolution)
+      setSingleImage(newLayer, width, height, `Ảnh chụp ${timeStr}`);
+    }
+
     setAppMode('editor');
     setActiveTool('beauty');
+
+    setTimeout(() => {
+      window.dispatchEvent(new CustomEvent('lumix:fit-to-screen'));
+    }, 40);
   };
 
   // Process imported image files (Main photo editing flow)
@@ -143,156 +149,21 @@ export default function App() {
     const files = e.target.files;
     if (!files || files.length === 0) return;
 
+    const isMultiLayerMode = activeTool === 'layers' || activeTool === 'collage';
+
     for (let i = 0; i < files.length; i++) {
       const file = files[i];
       try {
         const { dataUrl, width, height } = await downscaleImageIfNeeded(file);
-
-        // When loading an image from device library:
-        // PRESERVE 100% OF ITS ORIGINAL DIMENSIONS & PIXEL RESOLUTION!
-        const currentLayers = useEditorStore.getState().layers;
-        const existingImages = currentLayers.filter((l) => l.type === 'image');
-        const isPrimaryOrReplacing = existingImages.length <= 1;
-
-        let layerW = width;
-        let layerH = height;
-        let layerX = 0;
-        let layerY = 0;
-
-        if (isPrimaryOrReplacing) {
-          // If previous canvas had an old sample/single image, replace it so new photo becomes the active canvas
-          if (existingImages.length === 1 && currentLayers.length === 1) {
-            useEditorStore.getState().removeLayer(existingImages[0].id);
-          }
-          // Set canvas to 100% EXACT pixel dimensions of this photo
-          setCanvasDimensions(width, height);
-          layerW = width;
-          layerH = height;
-          layerX = 0;
-          layerY = 0;
-        } else {
-          // If already has multiple layers, center this photo in its natural full resolution
-          const curW = useEditorStore.getState().canvasWidth;
-          const curH = useEditorStore.getState().canvasHeight;
-          layerW = width;
-          layerH = height;
-          layerX = Math.round((curW - layerW) / 2);
-          layerY = Math.round((curH - layerH) / 2);
-        }
-
         const cleanName = file.name.replace(/\.[^/.]+$/, '').trim();
-        if (cleanName && isPrimaryOrReplacing) {
-          useEditorStore.getState().setProjectName(cleanName.substring(0, 32));
-        }
 
-        const newLayer: ImageLayer = {
-          id: 'img_' + Date.now() + '_' + i,
-          name: cleanName || `Ảnh ${currentLayers.length + 1}`,
-          type: 'image',
-          visible: true,
-          locked: false,
-          opacity: 1,
-          blendMode: 'source-over',
-          src: dataUrl,
-          originalWidth: width,
-          originalHeight: height,
-          x: layerX,
-          y: layerY,
-          width: layerW,
-          height: layerH,
-          rotation: 0,
-          scaleX: 1,
-          scaleY: 1,
-          adjustments: {
-            brightness: 0,
-            contrast: 0,
-            saturation: 0,
-            exposure: 0,
-            highlights: 0,
-            shadows: 0,
-            temperature: 0,
-            tint: 0,
-            sharpness: 0,
-            vignette: 0,
-            clarity: 0,
-            blackPoint: 0,
-            gamma: 1.0,
-            whitePoint: 255,
-          },
-          beauty: { ...DEFAULT_BEAUTY_SETTINGS },
-          filterId: 'normal',
-          filterIntensity: 100,
-        };
-
-        addLayer(newLayer);
-        useEditorStore.getState().setActiveLayerId(newLayer.id);
-
-        // Instantly trigger fit-to-screen so the entire photo fits comfortably on screen
-        setTimeout(() => {
-          window.dispatchEvent(new CustomEvent('lumix:fit-to-screen'));
-        }, 30);
-        setTimeout(() => {
-          window.dispatchEvent(new CustomEvent('lumix:fit-to-screen'));
-        }, 150);
-      } catch (err) {
-        console.error('Failed to import image:', err);
-      }
-    }
-  };
-
-  // Drag and drop onto window
-  useEffect(() => {
-    const handleDragOver = (e: DragEvent) => {
-      e.preventDefault();
-      e.stopPropagation();
-    };
-
-    const handleDrop = async (e: DragEvent) => {
-      e.preventDefault();
-      e.stopPropagation();
-      const files = e.dataTransfer?.files;
-      if (!files || files.length === 0) return;
-
-      for (let i = 0; i < files.length; i++) {
-        const file = files[i];
-        if (!file.type.startsWith('image/')) continue;
-        try {
-          const { dataUrl, width, height } = await downscaleImageIfNeeded(file);
-          const currentLayers = useEditorStore.getState().layers;
-          const existingImages = currentLayers.filter((l) => l.type === 'image');
-          const isPrimaryOrReplacing = existingImages.length <= 1;
-
-          let layerW = width;
-          let layerH = height;
-          let layerX = 0;
-          let layerY = 0;
-
-          if (isPrimaryOrReplacing) {
-            if (existingImages.length === 1 && currentLayers.length === 1) {
-              useEditorStore.getState().removeLayer(existingImages[0].id);
-            }
-            setCanvasDimensions(width, height);
-            layerW = width;
-            layerH = height;
-            layerX = 0;
-            layerY = 0;
-          } else {
-            const curW = useEditorStore.getState().canvasWidth;
-            const curH = useEditorStore.getState().canvasHeight;
-            layerW = width;
-            layerH = height;
-            layerX = Math.round((curW - layerW) / 2);
-            layerY = Math.round((curH - layerH) / 2);
-          }
-
-          const cleanName = file.name.replace(/\.[^/.]+$/, '').trim();
-          if (cleanName && isPrimaryOrReplacing) {
-            useEditorStore.getState().setProjectName(cleanName.substring(0, 32));
-          }
-
+        if (!isMultiLayerMode) {
+          // SINGLE IMAGE EDITING MODE (Default iOS / Android style):
+          // Canvas dimensions = 100% EXACT pixel dimensions of this photo
+          // Discard previous layers so this is a clean single photo edit
           const newLayer: ImageLayer = {
             id: 'img_' + Date.now() + '_' + i,
-            name: cleanName || `Ảnh ${currentLayers.length + 1}`,
+            name: cleanName || 'Ảnh chỉnh sửa',
             type: 'image',
             visible: true,
             locked: false,
@@ -301,10 +172,10 @@ export default function App() {
             src: dataUrl,
             originalWidth: width,
             originalHeight: height,
-            x: layerX,
-            y: layerY,
-            width: layerW,
-            height: layerH,
+            x: 0,
+            y: 0,
+            width: width,
+            height: height,
             rotation: 0,
             scaleX: 1,
             scaleY: 1,
@@ -328,15 +199,193 @@ export default function App() {
             filterId: 'normal',
             filterIntensity: 100,
           };
-          addLayer(newLayer);
-          useEditorStore.getState().setActiveLayerId(newLayer.id);
 
+          setSingleImage(newLayer, width, height, cleanName || 'Ảnh chỉnh sửa');
+
+          // Trigger fit-to-screen to fit viewport with comfortable margins
           setTimeout(() => {
             window.dispatchEvent(new CustomEvent('lumix:fit-to-screen'));
           }, 30);
           setTimeout(() => {
             window.dispatchEvent(new CustomEvent('lumix:fit-to-screen'));
           }, 150);
+          // In single image mode, process 1 photo as primary
+          break;
+        } else {
+          // MULTI-LAYER / COLLAGE MODE:
+          const curW = useEditorStore.getState().canvasWidth || width;
+          const curH = useEditorStore.getState().canvasHeight || height;
+          const layerX = Math.round((curW - width) / 2);
+          const layerY = Math.round((curH - height) / 2);
+
+          const newLayer: ImageLayer = {
+            id: 'img_' + Date.now() + '_' + i,
+            name: cleanName || `Lớp ảnh ${useEditorStore.getState().layers.length + 1}`,
+            type: 'image',
+            visible: true,
+            locked: false,
+            opacity: 1,
+            blendMode: 'source-over',
+            src: dataUrl,
+            originalWidth: width,
+            originalHeight: height,
+            x: layerX,
+            y: layerY,
+            width: width,
+            height: height,
+            rotation: 0,
+            scaleX: 1,
+            scaleY: 1,
+            adjustments: {
+              brightness: 0,
+              contrast: 0,
+              saturation: 0,
+              exposure: 0,
+              highlights: 0,
+              shadows: 0,
+              temperature: 0,
+              tint: 0,
+              sharpness: 0,
+              vignette: 0,
+              clarity: 0,
+              blackPoint: 0,
+              gamma: 1.0,
+              whitePoint: 255,
+            },
+            beauty: { ...DEFAULT_BEAUTY_SETTINGS },
+            filterId: 'normal',
+            filterIntensity: 100,
+          };
+
+          addLayer(newLayer);
+        }
+      } catch (err) {
+        console.error('Failed to import image:', err);
+      }
+    }
+  };
+
+  // Drag and drop onto window
+  useEffect(() => {
+    const handleDragOver = (e: DragEvent) => {
+      e.preventDefault();
+      e.stopPropagation();
+    };
+
+    const handleDrop = async (e: DragEvent) => {
+      e.preventDefault();
+      e.stopPropagation();
+      const files = e.dataTransfer?.files;
+      if (!files || files.length === 0) return;
+
+      const isMultiLayerMode = activeTool === 'layers' || activeTool === 'collage';
+
+      for (let i = 0; i < files.length; i++) {
+        const file = files[i];
+        if (!file.type.startsWith('image/')) continue;
+        try {
+          const { dataUrl, width, height } = await downscaleImageIfNeeded(file);
+          const cleanName = file.name.replace(/\.[^/.]+$/, '').trim();
+
+          if (!isMultiLayerMode) {
+            // Single Image Editing Mode
+            const newLayer: ImageLayer = {
+              id: 'img_' + Date.now() + '_' + i,
+              name: cleanName || 'Ảnh chỉnh sửa',
+              type: 'image',
+              visible: true,
+              locked: false,
+              opacity: 1,
+              blendMode: 'source-over',
+              src: dataUrl,
+              originalWidth: width,
+              originalHeight: height,
+              x: 0,
+              y: 0,
+              width: width,
+              height: height,
+              rotation: 0,
+              scaleX: 1,
+              scaleY: 1,
+              adjustments: {
+                brightness: 0,
+                contrast: 0,
+                saturation: 0,
+                exposure: 0,
+                highlights: 0,
+                shadows: 0,
+                temperature: 0,
+                tint: 0,
+                sharpness: 0,
+                vignette: 0,
+                clarity: 0,
+                blackPoint: 0,
+                gamma: 1.0,
+                whitePoint: 255,
+              },
+              beauty: { ...DEFAULT_BEAUTY_SETTINGS },
+              filterId: 'normal',
+              filterIntensity: 100,
+            };
+
+            setSingleImage(newLayer, width, height, cleanName || 'Ảnh chỉnh sửa');
+            setTimeout(() => {
+              window.dispatchEvent(new CustomEvent('lumix:fit-to-screen'));
+            }, 30);
+            break;
+          } else {
+            // Multi-layer mode
+            const curW = useEditorStore.getState().canvasWidth || width;
+            const curH = useEditorStore.getState().canvasHeight || height;
+            const layerX = Math.round((curW - width) / 2);
+            const layerY = Math.round((curH - height) / 2);
+
+            const newLayer: ImageLayer = {
+              id: 'img_' + Date.now() + '_' + i,
+              name: cleanName || `Lớp ảnh ${useEditorStore.getState().layers.length + 1}`,
+              type: 'image',
+              visible: true,
+              locked: false,
+              opacity: 1,
+              blendMode: 'source-over',
+              src: dataUrl,
+              originalWidth: width,
+              originalHeight: height,
+              x: layerX,
+              y: layerY,
+              width: width,
+              height: height,
+              rotation: 0,
+              scaleX: 1,
+              scaleY: 1,
+              adjustments: {
+                brightness: 0,
+                contrast: 0,
+                saturation: 0,
+                exposure: 0,
+                highlights: 0,
+                shadows: 0,
+                temperature: 0,
+                tint: 0,
+                sharpness: 0,
+                vignette: 0,
+                clarity: 0,
+                blackPoint: 0,
+                gamma: 1.0,
+                whitePoint: 255,
+              },
+              beauty: { ...DEFAULT_BEAUTY_SETTINGS },
+              filterId: 'normal',
+              filterIntensity: 100,
+            };
+
+            addLayer(newLayer);
+            useEditorStore.getState().setActiveLayerId(newLayer.id);
+
+            setTimeout(() => {
+              window.dispatchEvent(new CustomEvent('lumix:fit-to-screen'));
+            }, 30);
+          }
         } catch (err) {
           console.error('Drop image failed:', err);
         }
