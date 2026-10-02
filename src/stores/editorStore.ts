@@ -76,10 +76,12 @@ interface EditorState {
   brushSize: number;
   brushOpacity: number;
   isEraser: boolean;
+  eraserMode: 'pixel' | 'stroke';
   setBrushColor: (color: string) => void;
   setBrushSize: (size: number) => void;
   setBrushOpacity: (opacity: number) => void;
   setIsEraser: (isEraser: boolean) => void;
+  setEraserMode: (mode: 'pixel' | 'stroke') => void;
 
   // Collage tool state
   collageConfig: CollageConfig;
@@ -407,10 +409,12 @@ export const useEditorStore = create<EditorState>((set, get) => ({
   brushSize: 12,
   brushOpacity: 1,
   isEraser: false,
+  eraserMode: 'pixel',
   setBrushColor: (color) => set({ brushColor: color }),
   setBrushSize: (size) => set({ brushSize: size }),
   setBrushOpacity: (opacity) => set({ brushOpacity: opacity }),
   setIsEraser: (isEraser) => set({ isEraser }),
+  setEraserMode: (mode) => set({ eraserMode: mode }),
 
   collageConfig: {
     layout: 'freeform',

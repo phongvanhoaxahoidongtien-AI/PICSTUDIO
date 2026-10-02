@@ -7,6 +7,10 @@ import {
   CheckCircle2,
   Sliders,
   Layers,
+  Image as ImageIcon,
+  FolderDown,
+  Copy,
+  FolderCheck,
 } from 'lucide-react';
 import { useEditorStore } from '../../stores/editorStore';
 import type { ImageLayer, TextLayer, DrawingLayer, StickerLayer } from '../../types';
@@ -34,6 +38,8 @@ export const ExportModal: React.FC<ExportModalProps> = ({ isOpen, onClose }) => 
   const [estimatedSize, setEstimatedSize] = useState<string>('...');
   const [isExporting, setIsExporting] = useState(false);
   const [isSuccess, setIsSuccess] = useState(false);
+  const [successMessage, setSuccessMessage] = useState('Đã lưu thành công!');
+  const [previewUrl, setPreviewUrl] = useState<string | null>(null);
 
   const outWidth = Math.round(canvasWidth * scale);
   const outHeight = Math.round(canvasHeight * scale);
@@ -159,27 +165,63 @@ export const ExportModal: React.FC<ExportModalProps> = ({ isOpen, onClose }) => 
         });
       } else if (layer.type === 'drawing') {
         const drawLayer = layer as DrawingLayer;
-        ctx.lineCap = 'round';
-        ctx.lineJoin = 'round';
+        if (drawLayer.paths.length > 0) {
+          const offscreen = document.createElement('canvas');
+          offscreen.width = Math.max(1, Math.round(lw));
+          offscreen.height = Math.max(1, Math.round(lh));
+          const offCtx = offscreen.getContext('2d');
+          if (offCtx) {
+            offCtx.lineCap = 'round';
+            offCtx.lineJoin = 'round';
 
-        drawLayer.paths.forEach((path) => {
-          if (path.points.length < 2) return;
-          ctx.save();
-          if (path.isEraser) {
-            ctx.globalCompositeOperation = 'destination-out';
-          } else {
-            ctx.strokeStyle = path.color;
-            ctx.globalAlpha = path.opacity;
+            drawLayer.paths.forEach((path) => {
+              if (path.points.length === 0) return;
+              offCtx.save();
+              offCtx.lineCap = 'round';
+              offCtx.lineJoin = 'round';
+              if (path.isEraser) {
+                offCtx.globalCompositeOperation = 'destination-out';
+                offCtx.strokeStyle = 'rgba(0,0,0,1)';
+                offCtx.fillStyle = 'rgba(0,0,0,1)';
+                offCtx.globalAlpha = 1.0;
+              } else {
+                offCtx.globalCompositeOperation = 'source-over';
+                offCtx.strokeStyle = path.color;
+                offCtx.fillStyle = path.color;
+                offCtx.globalAlpha = path.opacity;
+              }
+              offCtx.lineWidth = path.size * layerScale;
+
+              if (path.points.length === 1) {
+                offCtx.beginPath();
+                offCtx.arc(path.points[0].x * layerScale, path.points[0].y * layerScale, Math.max(1, (path.size * layerScale) / 2), 0, Math.PI * 2);
+                offCtx.fill();
+              } else {
+                offCtx.beginPath();
+                offCtx.arc(path.points[0].x * layerScale, path.points[0].y * layerScale, Math.max(1, (path.size * layerScale) / 2), 0, Math.PI * 2);
+                offCtx.fill();
+
+                offCtx.beginPath();
+                offCtx.moveTo(path.points[0].x * layerScale, path.points[0].y * layerScale);
+                for (let i = 1; i < path.points.length - 1; i++) {
+                  const midX = ((path.points[i].x + path.points[i + 1].x) / 2) * layerScale;
+                  const midY = ((path.points[i].y + path.points[i + 1].y) / 2) * layerScale;
+                  offCtx.quadraticCurveTo(path.points[i].x * layerScale, path.points[i].y * layerScale, midX, midY);
+                }
+                const lastPt = path.points[path.points.length - 1];
+                offCtx.lineTo(lastPt.x * layerScale, lastPt.y * layerScale);
+                offCtx.stroke();
+
+                offCtx.beginPath();
+                offCtx.arc(lastPt.x * layerScale, lastPt.y * layerScale, Math.max(1, (path.size * layerScale) / 2), 0, Math.PI * 2);
+                offCtx.fill();
+              }
+              offCtx.restore();
+            });
+
+            ctx.drawImage(offscreen, 0, 0);
           }
-          ctx.lineWidth = path.size * layerScale;
-          ctx.beginPath();
-          ctx.moveTo(path.points[0].x * layerScale, path.points[0].y * layerScale);
-          for (let i = 1; i < path.points.length; i++) {
-            ctx.lineTo(path.points[i].x * layerScale, path.points[i].y * layerScale);
-          }
-          ctx.stroke();
-          ctx.restore();
-        });
+        }
       } else if (layer.type === 'sticker') {
         const stickerLayer = layer as StickerLayer;
         if (stickerLayer.svgContent) {
@@ -225,6 +267,11 @@ export const ExportModal: React.FC<ExportModalProps> = ({ isOpen, onClose }) => 
             } else {
               setEstimatedSize(Math.round(estBytes / 1024) + ' KB');
             }
+            try {
+              setPreviewUrl(sampleCanvas.toDataURL(format, quality));
+            } catch {
+              // Ignore preview fallback
+            }
           },
           format,
           quality
@@ -240,16 +287,87 @@ export const ExportModal: React.FC<ExportModalProps> = ({ isOpen, onClose }) => 
     };
   }, [format, quality, scale, outWidth, outHeight, canvasBackgroundColor]);
 
-  const handleDownload = async () => {
+  // 1. Save directly to Photos / Gallery (Bộ sưu tập ảnh)
+  const handleSaveToGallery = async () => {
     setIsExporting(true);
     try {
       const canvas = await generateExportCanvas();
       canvas.toBlob(
-        (blob) => {
+        async (blob) => {
+          if (!blob) return;
+          const ext = format === 'image/jpeg' ? 'jpg' : format === 'image/webp' ? 'webp' : 'png';
+          const filename = `${projectName.replace(/\s+/g, '_')}_lumix.${ext}`;
+          const file = new File([blob], filename, { type: format });
+
+          // Web Share API triggers native "Save Image" / "Lưu hình ảnh" into Photos on iOS and Android
+          if (navigator.canShare && navigator.canShare({ files: [file] })) {
+            try {
+              await navigator.share({
+                files: [file],
+                title: projectName,
+                text: 'Lưu vào Bộ sưu tập ảnh của thiết bị',
+              });
+              setIsSuccess(true);
+              setSuccessMessage('Đã mở hộp thoại lưu vào Bộ sưu tập!');
+              setTimeout(() => setIsSuccess(false), 3500);
+            } catch (shareErr) {
+              if ((shareErr as Error).name !== 'AbortError') {
+                handleDownload();
+              }
+            }
+          } else {
+            // Desktop fallback: prompt download & notification
+            handleDownload();
+          }
+        },
+        format,
+        quality
+      );
+    } catch (err) {
+      console.error('Save to gallery failed:', err);
+    } finally {
+      setIsExporting(false);
+    }
+  };
+
+  // 2. Download directly to device Downloads folder (Tải về thư mục Download)
+  const handleDownload = async (askFolder = false) => {
+    setIsExporting(true);
+    try {
+      const canvas = await generateExportCanvas();
+      canvas.toBlob(
+        async (blob) => {
           if (!blob) return;
           const ext = format === 'image/jpeg' ? 'jpg' : format === 'image/webp' ? 'webp' : 'png';
           const filename = `${projectName.replace(/\s+/g, '_')}_lumix.${ext}`;
 
+          // File System Access API: Allow user to pick exact folder (Pictures, Downloads, Documents)
+          if (askFolder && 'showSaveFilePicker' in window) {
+            try {
+              const handle = await (window as unknown as {
+                showSaveFilePicker: (opts: unknown) => Promise<FileSystemFileHandle>;
+              }).showSaveFilePicker({
+                suggestedName: filename,
+                types: [
+                  {
+                    description: 'Tệp hình ảnh',
+                    accept: { [format]: [`.${ext}`] },
+                  },
+                ],
+              });
+              const writable = await handle.createWritable();
+              await writable.write(blob);
+              await writable.close();
+              setIsSuccess(true);
+              setSuccessMessage('Đã lưu ảnh vào thư mục bạn chọn thành công!');
+              setTimeout(() => setIsSuccess(false), 3500);
+              return;
+            } catch (pickerErr) {
+              if ((pickerErr as Error).name === 'AbortError') return;
+            }
+          }
+
+          // Direct browser download into Downloads folder
           const url = URL.createObjectURL(blob);
           const a = document.createElement('a');
           a.href = url;
@@ -260,13 +378,50 @@ export const ExportModal: React.FC<ExportModalProps> = ({ isOpen, onClose }) => 
           URL.revokeObjectURL(url);
 
           setIsSuccess(true);
-          setTimeout(() => setIsSuccess(false), 3000);
+          setSuccessMessage('Đã tải xuống thư mục Download (Tải về) thành công!');
+          setTimeout(() => setIsSuccess(false), 3500);
         },
         format,
         quality
       );
     } catch (err) {
-      console.error('Export failed:', err);
+      console.error('Export download failed:', err);
+    } finally {
+      setIsExporting(false);
+    }
+  };
+
+  // 3. Copy image to system clipboard
+  const handleCopyToClipboard = async () => {
+    setIsExporting(true);
+    try {
+      const canvas = await generateExportCanvas();
+      canvas.toBlob(async (blob) => {
+        if (!blob) return;
+        try {
+          let pngBlob = blob;
+          if (blob.type !== 'image/png') {
+            const pngCanvas = document.createElement('canvas');
+            pngCanvas.width = canvas.width;
+            pngCanvas.height = canvas.height;
+            const pCtx = pngCanvas.getContext('2d');
+            if (pCtx) {
+              pCtx.drawImage(canvas, 0, 0);
+              pngBlob = await new Promise<Blob>((res) => pngCanvas.toBlob((b) => res(b!), 'image/png'));
+            }
+          }
+          await navigator.clipboard.write([
+            new ClipboardItem({ 'image/png': pngBlob }),
+          ]);
+          setIsSuccess(true);
+          setSuccessMessage('Đã sao chép ảnh vào bộ nhớ tạm! Bạn có thể dán (Ctrl+V) ngay.');
+          setTimeout(() => setIsSuccess(false), 3500);
+        } catch {
+          handleDownload(false);
+        }
+      }, 'image/png');
+    } catch (err) {
+      console.error('Clipboard copy failed:', err);
     } finally {
       setIsExporting(false);
     }
@@ -290,7 +445,6 @@ export const ExportModal: React.FC<ExportModalProps> = ({ isOpen, onClose }) => 
               text: 'Ảnh chỉnh sửa từ Lumix Studio PWA Offline',
             });
           } else {
-            // Fallback download if share not supported
             handleDownload();
           }
         },
@@ -392,42 +546,95 @@ export const ExportModal: React.FC<ExportModalProps> = ({ isOpen, onClose }) => 
           </div>
         </div>
 
-        {/* Info card */}
-        <div className="flex items-center justify-between p-3 rounded-2xl bg-slate-800/60 border border-slate-700/60 text-xs text-slate-300">
-          <span>Kích thước file ước tính:</span>
-          <span className="font-mono text-emerald-400 font-bold text-sm">{estimatedSize}</span>
+        {/* Info card & Live Preview Thumbnail */}
+        <div className="flex items-center gap-3 p-2.5 rounded-2xl bg-slate-800/60 border border-slate-700/60 text-xs text-slate-300">
+          {previewUrl && (
+            <div className="relative w-14 h-14 rounded-xl overflow-hidden bg-black/40 border border-slate-700 shrink-0 flex items-center justify-center">
+              <img
+                src={previewUrl}
+                alt="Xem trước ảnh xuất"
+                className="w-full h-full object-cover"
+              />
+            </div>
+          )}
+          <div className="flex-1 min-w-0">
+            <div className="flex items-center justify-between text-[11px] mb-0.5">
+              <span className="text-slate-400">Dung lượng ước tính:</span>
+              <span className="font-mono text-emerald-400 font-bold">{estimatedSize}</span>
+            </div>
+            <p className="text-[10px] text-slate-400 leading-tight">
+              Mẹo: Chạm giữ ảnh nhỏ để chọn &quot;Lưu vào Ảnh&quot; hoặc bấm nút bên dưới.
+            </p>
+          </div>
         </div>
 
-        {/* Action Buttons */}
-        <div className="flex items-center gap-2 pt-2">
-          {/* Share Button (iOS Safari / Android native share) */}
+        {/* Success Banner */}
+        {isSuccess && (
+          <div className="p-2.5 rounded-xl bg-emerald-500/15 border border-emerald-500/40 text-emerald-300 text-xs flex items-center gap-2 animate-in fade-in">
+            <CheckCircle2 className="w-4 h-4 shrink-0 text-emerald-400" />
+            <span className="font-semibold">{successMessage}</span>
+          </div>
+        )}
+
+        {/* Action Buttons: 1. Save to Photos/Gallery, 2. Download to Downloads folder */}
+        <div className="flex flex-col gap-2 pt-1">
+          <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
+            {/* Primary: Save to Photos / Camera Roll / Gallery */}
+            <button
+              onClick={handleSaveToGallery}
+              disabled={isExporting}
+              className="flex items-center justify-center gap-2 py-3 px-3 rounded-2xl bg-gradient-to-r from-pink-500 via-rose-500 to-amber-500 hover:opacity-95 text-white text-xs sm:text-sm font-bold shadow-lg shadow-pink-600/25 transition active:scale-95 disabled:opacity-50"
+              title="Lưu ảnh trực tiếp vào Cuộn camera / Bộ sưu tập Ảnh trên thiết bị"
+            >
+              <ImageIcon className="w-4 h-4" />
+              <span>{isExporting ? 'Đang xử lý...' : 'Lưu vào Bộ sưu tập (Ảnh)'}</span>
+            </button>
+
+            {/* Direct Download to Downloads directory */}
+            <button
+              onClick={() => handleDownload(false)}
+              disabled={isExporting}
+              className="flex items-center justify-center gap-2 py-3 px-3 rounded-2xl bg-gradient-to-r from-indigo-500 to-purple-600 hover:from-indigo-600 hover:to-purple-700 text-white text-xs sm:text-sm font-bold shadow-lg shadow-indigo-600/30 transition active:scale-95 disabled:opacity-50"
+              title="Tải tệp ảnh trực tiếp về thư mục Tải về (Downloads)"
+            >
+              <FolderDown className="w-4 h-4" />
+              <span>{isExporting ? 'Đang tải...' : 'Tải về mục Download'}</span>
+            </button>
+          </div>
+
+          <div className="grid grid-cols-2 gap-2">
+            {/* Custom Folder Picker via File System Access API */}
+            <button
+              onClick={() => handleDownload(true)}
+              disabled={isExporting}
+              className="flex items-center justify-center gap-1.5 py-2 px-2.5 rounded-xl bg-slate-800/90 hover:bg-slate-750 border border-slate-700/80 text-slate-200 text-xs font-semibold transition active:scale-95 disabled:opacity-50"
+              title="Tự chọn thư mục lưu (Downloads, Pictures, Documents...)"
+            >
+              <FolderCheck className="w-3.5 h-3.5 text-emerald-400" />
+              <span>Chọn thư mục lưu...</span>
+            </button>
+
+            {/* Copy to Clipboard */}
+            <button
+              onClick={handleCopyToClipboard}
+              disabled={isExporting}
+              className="flex items-center justify-center gap-1.5 py-2 px-2.5 rounded-xl bg-slate-800/90 hover:bg-slate-750 border border-slate-700/80 text-slate-200 text-xs font-semibold transition active:scale-95 disabled:opacity-50"
+              title="Sao chép ảnh vào bộ nhớ tạm để dán ngay"
+            >
+              <Copy className="w-3.5 h-3.5 text-sky-400" />
+              <span>Sao chép ảnh</span>
+            </button>
+          </div>
+
+          {/* Secondary: Native Share to social apps */}
           <button
             onClick={handleShare}
             disabled={isExporting}
-            className="flex-1 flex items-center justify-center gap-2 py-3 rounded-2xl bg-slate-800 hover:bg-slate-750 border border-slate-700 text-slate-200 text-xs sm:text-sm font-semibold transition active:scale-95 disabled:opacity-50"
-            title="Chia sẻ lên Instagram, Zalo, AirDrop..."
+            className="w-full flex items-center justify-center gap-2 py-2 rounded-xl bg-slate-800/80 hover:bg-slate-750 border border-slate-700/80 text-slate-300 text-xs font-semibold transition active:scale-95 disabled:opacity-50"
+            title="Chia sẻ lên Zalo, Messenger, Instagram, AirDrop..."
           >
-            <Share2 className="w-4 h-4 text-indigo-400" />
-            <span>Chia sẻ</span>
-          </button>
-
-          {/* Download Button */}
-          <button
-            onClick={handleDownload}
-            disabled={isExporting}
-            className="flex-1 flex items-center justify-center gap-2 py-3 rounded-2xl bg-gradient-to-r from-indigo-500 to-purple-600 hover:from-indigo-600 hover:to-purple-700 text-white text-xs sm:text-sm font-bold shadow-lg shadow-indigo-600/30 transition active:scale-95 disabled:opacity-50"
-          >
-            {isSuccess ? (
-              <>
-                <CheckCircle2 className="w-4 h-4 text-emerald-300" />
-                <span>Đã lưu thành công!</span>
-              </>
-            ) : (
-              <>
-                <Download className="w-4 h-4" />
-                <span>{isExporting ? 'Đang xuất...' : 'Tải về máy'}</span>
-              </>
-            )}
+            <Share2 className="w-3.5 h-3.5 text-indigo-400" />
+            <span>Chia sẻ qua ứng dụng khác (Zalo, Instagram, Facebook...)</span>
           </button>
         </div>
       </div>

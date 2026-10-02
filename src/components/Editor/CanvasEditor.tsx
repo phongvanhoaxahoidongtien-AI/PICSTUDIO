@@ -15,6 +15,7 @@ import {
   Plus,
   X,
   Maximize2,
+  Share2,
 } from 'lucide-react';
 import { useEditorStore } from '../../stores/editorStore';
 import type {
@@ -24,6 +25,7 @@ import type {
   DrawingLayer,
   StickerLayer,
   DrawPoint,
+  DrawPath,
 } from '../../types';
 import { applyAdjustments, downscaleImageIfNeeded } from '../../utils/imageProcessing';
 import { FILTER_PRESETS } from '../../utils/filters';
@@ -33,9 +35,14 @@ import { applyBeautyEffects, DEFAULT_BEAUTY_SETTINGS } from '../../utils/beautyP
 interface CanvasEditorProps {
   onOpenFilePicker: () => void;
   onOpenCamera?: () => void;
+  onOpenShareApp?: () => void;
 }
 
-export const CanvasEditor: React.FC<CanvasEditorProps> = ({ onOpenFilePicker, onOpenCamera }) => {
+export const CanvasEditor: React.FC<CanvasEditorProps> = ({
+  onOpenFilePicker,
+  onOpenCamera,
+  onOpenShareApp,
+}) => {
   const {
     layers,
     activeLayerId,
@@ -59,6 +66,7 @@ export const CanvasEditor: React.FC<CanvasEditorProps> = ({ onOpenFilePicker, on
     brushSize,
     brushOpacity,
     isEraser,
+    eraserMode,
     setSingleImage,
     addLayer,
     pushHistory,
@@ -120,6 +128,12 @@ export const CanvasEditor: React.FC<CanvasEditorProps> = ({ onOpenFilePicker, on
   // Drawing state
   const isDrawingRef = useRef(false);
   const currentDrawPointsRef = useRef<DrawPoint[]>([]);
+  const activeDrawingLayerIdRef = useRef<string | null>(null);
+  const [cursorPos, setCursorPos] = useState<{ x: number; y: number; visible: boolean }>({
+    x: 0,
+    y: 0,
+    visible: false,
+  });
 
   // Get active selected layer
   const activeLayer = layers.find((l) => l.id === activeLayerId);
@@ -277,27 +291,63 @@ export const CanvasEditor: React.FC<CanvasEditorProps> = ({ onOpenFilePicker, on
         });
       } else if (layer.type === 'drawing') {
         const drawLayer = layer as DrawingLayer;
-        ctx.lineCap = 'round';
-        ctx.lineJoin = 'round';
+        if (drawLayer.paths.length > 0) {
+          const offscreen = document.createElement('canvas');
+          offscreen.width = Math.max(1, Math.round(layer.width));
+          offscreen.height = Math.max(1, Math.round(layer.height));
+          const offCtx = offscreen.getContext('2d');
+          if (offCtx) {
+            offCtx.lineCap = 'round';
+            offCtx.lineJoin = 'round';
 
-        drawLayer.paths.forEach((path) => {
-          if (path.points.length < 2) return;
-          ctx.save();
-          if (path.isEraser) {
-            ctx.globalCompositeOperation = 'destination-out';
-          } else {
-            ctx.strokeStyle = path.color;
-            ctx.globalAlpha = path.opacity;
+            drawLayer.paths.forEach((path) => {
+              if (path.points.length === 0) return;
+              offCtx.save();
+              offCtx.lineCap = 'round';
+              offCtx.lineJoin = 'round';
+              if (path.isEraser) {
+                offCtx.globalCompositeOperation = 'destination-out';
+                offCtx.strokeStyle = 'rgba(0,0,0,1)';
+                offCtx.fillStyle = 'rgba(0,0,0,1)';
+                offCtx.globalAlpha = 1.0;
+              } else {
+                offCtx.globalCompositeOperation = 'source-over';
+                offCtx.strokeStyle = path.color;
+                offCtx.fillStyle = path.color;
+                offCtx.globalAlpha = path.opacity;
+              }
+              offCtx.lineWidth = path.size;
+
+              if (path.points.length === 1) {
+                offCtx.beginPath();
+                offCtx.arc(path.points[0].x, path.points[0].y, Math.max(1, path.size / 2), 0, Math.PI * 2);
+                offCtx.fill();
+              } else {
+                offCtx.beginPath();
+                offCtx.arc(path.points[0].x, path.points[0].y, Math.max(1, path.size / 2), 0, Math.PI * 2);
+                offCtx.fill();
+
+                offCtx.beginPath();
+                offCtx.moveTo(path.points[0].x, path.points[0].y);
+                for (let i = 1; i < path.points.length - 1; i++) {
+                  const midX = (path.points[i].x + path.points[i + 1].x) / 2;
+                  const midY = (path.points[i].y + path.points[i + 1].y) / 2;
+                  offCtx.quadraticCurveTo(path.points[i].x, path.points[i].y, midX, midY);
+                }
+                const lastPt = path.points[path.points.length - 1];
+                offCtx.lineTo(lastPt.x, lastPt.y);
+                offCtx.stroke();
+
+                offCtx.beginPath();
+                offCtx.arc(lastPt.x, lastPt.y, Math.max(1, path.size / 2), 0, Math.PI * 2);
+                offCtx.fill();
+              }
+              offCtx.restore();
+            });
+
+            ctx.drawImage(offscreen, 0, 0);
           }
-          ctx.lineWidth = path.size;
-          ctx.beginPath();
-          ctx.moveTo(path.points[0].x, path.points[0].y);
-          for (let i = 1; i < path.points.length; i++) {
-            ctx.lineTo(path.points[i].x, path.points[i].y);
-          }
-          ctx.stroke();
-          ctx.restore();
-        });
+        }
       } else if (layer.type === 'sticker') {
         const stickerLayer = layer as StickerLayer;
         if (stickerLayer.svgContent) {
@@ -504,16 +554,100 @@ export const CanvasEditor: React.FC<CanvasEditorProps> = ({ onOpenFilePicker, on
     }
   };
 
+  // Helper to calculate distance from point (px, py) to line segment (x1, y1)-(x2, y2)
+  const distToSegment = (px: number, py: number, x1: number, y1: number, x2: number, y2: number) => {
+    const l2 = (x2 - x1) * (x2 - x1) + (y2 - y1) * (y2 - y1);
+    if (l2 === 0) return Math.hypot(px - x1, py - y1);
+    let t = ((px - x1) * (x2 - x1) + (py - y1) * (y2 - y1)) / l2;
+    t = Math.max(0, Math.min(1, t));
+    return Math.hypot(px - (x1 + t * (x2 - x1)), py - (y1 + t * (y2 - y1)));
+  };
+
+  // Erase entire stroke when clicked or swept over in 'stroke' eraser mode
+  const eraseStrokeAt = (cx: number, cy: number, hitRadius: number) => {
+    const currentLayers = useEditorStore.getState().layers;
+    let modified = false;
+
+    // Check all unlocked drawing layers from top to bottom
+    for (let lIndex = currentLayers.length - 1; lIndex >= 0; lIndex--) {
+      const layer = currentLayers[lIndex];
+      if (layer.type !== 'drawing' || layer.locked) continue;
+      const drawLayer = layer as DrawingLayer;
+      if (!drawLayer.paths || drawLayer.paths.length === 0) continue;
+
+      const remainingPaths: DrawPath[] = [];
+      let layerModified = false;
+
+      for (const p of drawLayer.paths) {
+        let isHit = false;
+        const effectiveRadius = hitRadius + p.size / 2;
+
+        if (p.points.length === 1) {
+          if (Math.hypot(cx - p.points[0].x, cy - p.points[0].y) <= effectiveRadius) {
+            isHit = true;
+          }
+        } else {
+          for (let i = 0; i < p.points.length - 1; i++) {
+            const d = distToSegment(cx, cy, p.points[i].x, p.points[i].y, p.points[i + 1].x, p.points[i + 1].y);
+            if (d <= effectiveRadius) {
+              isHit = true;
+              break;
+            }
+          }
+        }
+
+        if (isHit) {
+          layerModified = true;
+          modified = true;
+        } else {
+          remainingPaths.push(p);
+        }
+      }
+
+      if (layerModified) {
+        updateLayer(drawLayer.id, { paths: remainingPaths });
+      }
+    }
+    return modified;
+  };
+
   // Pointer interactions
   const handlePointerDown = (e: React.PointerEvent) => {
     if (activeTool === 'draw') {
-      // Start freehand drawing
-      isDrawingRef.current = true;
+      try {
+        (e.currentTarget as HTMLElement).setPointerCapture?.(e.pointerId);
+      } catch {}
       const { x, y } = screenToCanvas(e.clientX, e.clientY);
+      setCursorPos({ x, y, visible: true });
+
+      // If in Stroke Eraser mode: Erase any stroke directly touched
+      if (isEraser && eraserMode === 'stroke') {
+        isDrawingRef.current = true;
+        const hit = eraseStrokeAt(x, y, Math.max(16, brushSize / 2));
+        if (hit) {
+          pushHistory();
+        }
+        return;
+      }
+
+      // Freehand drawing or Pixel Eraser (destination-out)
+      isDrawingRef.current = true;
       currentDrawPointsRef.current = [{ x, y }];
 
-      // Check if there is an active drawing layer, else create one
-      let drawLayer = layers.find((l) => l.type === 'drawing' && !l.locked) as DrawingLayer | undefined;
+      const newPath: DrawPath = {
+        points: [{ x, y }],
+        color: brushColor,
+        size: brushSize,
+        opacity: brushOpacity,
+        isEraser,
+      };
+
+      // Always read latest layers from Zustand store to prevent stale React closure bugs
+      const currentLayers = useEditorStore.getState().layers;
+      let drawLayer = (activeDrawingLayerIdRef.current
+        ? currentLayers.find((l) => l.id === activeDrawingLayerIdRef.current && l.type === 'drawing' && !l.locked)
+        : currentLayers.slice().reverse().find((l) => l.type === 'drawing' && !l.locked)) as DrawingLayer | undefined;
+
       if (!drawLayer) {
         drawLayer = {
           id: 'draw_' + Date.now(),
@@ -530,9 +664,13 @@ export const CanvasEditor: React.FC<CanvasEditorProps> = ({ onOpenFilePicker, on
           rotation: 0,
           scaleX: 1,
           scaleY: 1,
-          paths: [],
+          paths: [newPath],
         };
         addLayer(drawLayer);
+        activeDrawingLayerIdRef.current = drawLayer.id;
+      } else {
+        activeDrawingLayerIdRef.current = drawLayer.id;
+        updateLayer(drawLayer.id, { paths: [...drawLayer.paths, newPath] });
       }
       return;
     }
@@ -573,23 +711,42 @@ export const CanvasEditor: React.FC<CanvasEditorProps> = ({ onOpenFilePicker, on
   };
 
   const handlePointerMove = (e: React.PointerEvent) => {
-    if (isDrawingRef.current) {
+    if (activeTool === 'draw') {
       const { x, y } = screenToCanvas(e.clientX, e.clientY);
-      currentDrawPointsRef.current.push({ x, y });
+      setCursorPos({ x, y, visible: true });
 
-      const drawLayer = layers.find((l) => l.type === 'drawing' && !l.locked) as DrawingLayer | undefined;
-      if (drawLayer) {
-        const lastPath = {
-          points: [...currentDrawPointsRef.current],
-          color: brushColor,
-          size: brushSize,
-          opacity: brushOpacity,
-          isEraser,
-        };
-        const nextPaths = [...drawLayer.paths.filter((_, i) => i !== drawLayer.paths.length - 1), lastPath];
-        updateLayer(drawLayer.id, { paths: nextPaths });
+      if (isDrawingRef.current) {
+        if (isEraser && eraserMode === 'stroke') {
+          // Sweep erase strokes under finger/cursor
+          eraseStrokeAt(x, y, Math.max(16, brushSize / 2));
+          return;
+        }
+
+        const points = currentDrawPointsRef.current;
+        const lastPt = points[points.length - 1];
+
+        // Smooth sampling: only add point if moved >= 1px to eliminate jitter while staying high precision
+        if (!lastPt || Math.hypot(x - lastPt.x, y - lastPt.y) >= 1) {
+          points.push({ x, y });
+
+          const currentLayers = useEditorStore.getState().layers;
+          const targetId = activeDrawingLayerIdRef.current;
+          const drawLayer = (targetId
+            ? currentLayers.find((l) => l.id === targetId)
+            : currentLayers.slice().reverse().find((l) => l.type === 'drawing' && !l.locked)) as DrawingLayer | undefined;
+
+          if (drawLayer && drawLayer.paths.length > 0) {
+            const updatedPaths = [...drawLayer.paths];
+            const curIndex = updatedPaths.length - 1;
+            updatedPaths[curIndex] = {
+              ...updatedPaths[curIndex],
+              points: [...points],
+            };
+            updateLayer(drawLayer.id, { paths: updatedPaths });
+          }
+        }
+        return;
       }
-      return;
     }
 
     if (isPanningRef.current) {
@@ -657,7 +814,12 @@ export const CanvasEditor: React.FC<CanvasEditorProps> = ({ onOpenFilePicker, on
     }
   };
 
-  const handlePointerUp = () => {
+  const handlePointerUp = (e?: React.PointerEvent) => {
+    if (e && e.currentTarget) {
+      try {
+        (e.currentTarget as HTMLElement).releasePointerCapture?.(e.pointerId);
+      } catch {}
+    }
     if (isDrawingRef.current) {
       isDrawingRef.current = false;
       pushHistory();
@@ -863,6 +1025,16 @@ export const CanvasEditor: React.FC<CanvasEditorProps> = ({ onOpenFilePicker, on
               <span>Mở ảnh từ thiết bị</span>
             </button>
 
+            {onOpenShareApp && (
+              <button
+                onClick={onOpenShareApp}
+                className="w-full flex items-center justify-center gap-2 py-2.5 px-4 rounded-2xl bg-gradient-to-r from-pink-950/60 via-purple-950/60 to-indigo-950/60 hover:from-pink-900/70 hover:to-indigo-900/70 text-pink-200 font-semibold text-xs sm:text-sm border border-pink-500/30 active:scale-98 transition shadow-md"
+              >
+                <Share2 className="w-4 h-4 text-pink-400" />
+                <span>Chia sẻ ứng dụng cho bạn bè</span>
+              </button>
+            )}
+
             <div className="relative my-2">
               <div className="absolute inset-0 flex items-center">
                 <div className="w-full border-t border-slate-800" />
@@ -915,8 +1087,31 @@ export const CanvasEditor: React.FC<CanvasEditorProps> = ({ onOpenFilePicker, on
             className="w-full h-full block rounded-sm cursor-crosshair"
           />
 
-          {/* Active Layer Transformer / Selection Box (Only for stickers, text, drawings, or in multi-layer mode) */}
-          {activeLayer && !activeLayer.locked && (activeTool === 'layers' || activeTool === 'collage' || activeLayer.type !== 'image') && (
+          {/* Real-time Brush & Eraser Size Indicator Ring */}
+          {activeTool === 'draw' && cursorPos.visible && (
+            <div
+              style={{
+                left: `${cursorPos.x * zoom}px`,
+                top: `${cursorPos.y * zoom}px`,
+                width: `${Math.max(4, brushSize * zoom)}px`,
+                height: `${Math.max(4, brushSize * zoom)}px`,
+                transform: 'translate(-50%, -50%)',
+              }}
+              className={`absolute pointer-events-none rounded-full transition-transform duration-75 z-40 ${
+                isEraser
+                  ? 'border-2 border-rose-500 bg-rose-500/20 shadow-md shadow-rose-500/30'
+                  : 'border-2 border-white/90 shadow-md shadow-black/40'
+              }`}
+            >
+              <div
+                style={{ backgroundColor: isEraser ? '#f43f5e' : brushColor }}
+                className="w-1.5 h-1.5 rounded-full absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2"
+              />
+            </div>
+          )}
+
+          {/* Active Layer Transformer / Selection Box (Only for stickers, text, drawings, or in multi-layer mode - Hidden while drawing to prevent touch interference) */}
+          {activeLayer && !activeLayer.locked && activeTool !== 'draw' && (activeTool === 'layers' || activeTool === 'collage' || activeLayer.type !== 'image') && (
             <div
               style={{
                 left: `${activeLayer.x * zoom}px`,

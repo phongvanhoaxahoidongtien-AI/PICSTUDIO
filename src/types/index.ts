@@ -19,6 +19,8 @@ export interface ImageAdjustments {
   exposure: number;      // -100 to 100
   highlights: number;    // -100 to 100
   shadows: number;       // -100 to 100
+  whites?: number;       // -100 to 100 (Windows 11 Photos Whites)
+  blacks?: number;       // -100 to 100 (Windows 11 Photos Blacks)
   temperature: number;   // -100 to 100 (warm/cool)
   tint: number;          // -100 to 100 (green/magenta)
   sharpness: number;     // 0 to 100

@@ -20,6 +20,7 @@ import { CameraView } from './components/Camera/CameraView';
 import type { LiveBeautySettings } from './components/Camera/BeautyLiveControls';
 import { ExportModal } from './components/ExportModal/ExportModal';
 import { ProjectsModal } from './components/ProjectsModal/ProjectsModal';
+import { ShareAppModal } from './components/ShareAppModal/ShareAppModal';
 import { OfflineIndicator } from './components/PWA/OfflineIndicator';
 import { useEditorStore } from './stores/editorStore';
 import { downscaleImageIfNeeded } from './utils/imageProcessing';
@@ -49,6 +50,7 @@ export default function App() {
   const fileInputRef = useRef<HTMLInputElement>(null);
   const [isExportOpen, setIsExportOpen] = useState(false);
   const [isProjectsOpen, setIsProjectsOpen] = useState(false);
+  const [isShareAppOpen, setIsShareAppOpen] = useState(false);
 
   // File picker trigger
   const handleOpenFilePicker = () => {
@@ -109,6 +111,8 @@ export default function App() {
         exposure: 0,
         highlights: 0,
         shadows: 0,
+        whites: 0,
+        blacks: 0,
         temperature: 0,
         tint: 0,
         sharpness: 0,
@@ -120,10 +124,10 @@ export default function App() {
       },
       beauty: {
         ...DEFAULT_BEAUTY_SETTINGS,
-        smooth: liveSettings?.smooth ?? 35,
-        whiten: liveSettings?.whiten ?? 20,
-        glow: liveSettings?.glow ?? 20,
-        presetId: liveSettings?.presetId,
+        smooth: liveSettings?.smooth ?? 55,
+        whiten: liveSettings?.whiten ?? 40,
+        glow: liveSettings?.glow ?? 35,
+        presetId: liveSettings?.presetId || 'snow_baby',
       },
       filterId: liveSettings?.filterId || 'normal',
       filterIntensity: 100,
@@ -186,6 +190,8 @@ export default function App() {
               exposure: 0,
               highlights: 0,
               shadows: 0,
+              whites: 0,
+              blacks: 0,
               temperature: 0,
               tint: 0,
               sharpness: 0,
@@ -365,6 +371,8 @@ export default function App() {
                 exposure: 0,
                 highlights: 0,
                 shadows: 0,
+                whites: 0,
+                blacks: 0,
                 temperature: 0,
                 tint: 0,
                 sharpness: 0,
@@ -468,6 +476,7 @@ export default function App() {
         onOpenProjects={() => setIsProjectsOpen(true)}
         onOpenExport={() => setIsExportOpen(true)}
         onOpenCamera={() => setAppMode('camera')}
+        onOpenShareApp={() => setIsShareAppOpen(true)}
       />
 
       {/* Main Canvas Workspace with min-h-0 to allow flex shrinking on iOS */}
@@ -475,6 +484,7 @@ export default function App() {
         <CanvasEditor
           onOpenFilePicker={handleOpenFilePicker}
           onOpenCamera={() => setAppMode('camera')}
+          onOpenShareApp={() => setIsShareAppOpen(true)}
         />
 
         {/* Interactive Crop & Rotate Tool Overlay */}
@@ -525,6 +535,12 @@ export default function App() {
         isOpen={isProjectsOpen}
         onClose={() => setIsProjectsOpen(false)}
         onNewCanvas={handleOpenFilePicker}
+      />
+
+      {/* Share Application Modal */}
+      <ShareAppModal
+        isOpen={isShareAppOpen}
+        onClose={() => setIsShareAppOpen(false)}
       />
     </div>
   );

@@ -9,6 +9,7 @@ import {
   Moon,
   FolderOpen,
   Share,
+  Share2,
   Eye,
   Camera,
   MoreVertical,
@@ -30,9 +31,15 @@ interface HeaderProps {
   onOpenProjects: () => void;
   onOpenExport: () => void;
   onOpenCamera?: () => void;
+  onOpenShareApp?: () => void;
 }
 
-export const Header: React.FC<HeaderProps> = ({ onOpenProjects, onOpenExport, onOpenCamera }) => {
+export const Header: React.FC<HeaderProps> = ({
+  onOpenProjects,
+  onOpenExport,
+  onOpenCamera,
+  onOpenShareApp,
+}) => {
   const {
     projectId,
     projectName,
@@ -228,24 +235,29 @@ export const Header: React.FC<HeaderProps> = ({ onOpenProjects, onOpenExport, on
           )}
         </div>
 
-        {/* Center: Undo, Redo, Compare & Quick Zoom */}
-        <div className="flex items-center gap-1 sm:gap-1.5 shrink-0">
-          <div className="flex items-center bg-slate-800/70 rounded-xl p-0.5 border border-slate-700/60 shadow-inner">
+        {/* Center: Extra Large Undo & Redo, Compare & Quick Zoom */}
+        <div className="flex items-center gap-1 sm:gap-2 shrink-0">
+          <div className="flex items-center bg-slate-800/95 rounded-2xl p-1 sm:p-1.5 border border-slate-700 shadow-lg shadow-black/25">
             <button
               onClick={undo}
               disabled={!canUndo()}
-              className="p-1.5 rounded-lg text-slate-300 hover:text-white hover:bg-slate-700/60 disabled:opacity-25 disabled:pointer-events-none active:scale-90 transition"
-              title="Hoàn tác (Undo)"
+              className="flex items-center gap-1 px-2.5 py-1.5 sm:px-3 sm:py-2 rounded-xl text-slate-100 hover:text-white hover:bg-slate-700/80 disabled:opacity-20 disabled:pointer-events-none active:scale-90 transition font-bold"
+              title="Hoàn tác (Undo) - Ctrl+Z"
+              aria-label="Hoàn tác"
             >
-              <Undo2 className="w-3.5 h-3.5 sm:w-4 sm:h-4" />
+              <Undo2 className="w-5 h-5 sm:w-6 sm:h-6 stroke-[2.5]" />
+              <span className="hidden xl:inline text-xs font-bold">Undo</span>
             </button>
+            <div className="w-[1px] h-5 sm:h-6 bg-slate-700/90 mx-0.5 sm:mx-1" />
             <button
               onClick={redo}
               disabled={!canRedo()}
-              className="p-1.5 rounded-lg text-slate-300 hover:text-white hover:bg-slate-700/60 disabled:opacity-25 disabled:pointer-events-none active:scale-90 transition"
-              title="Làm lại (Redo)"
+              className="flex items-center gap-1 px-2.5 py-1.5 sm:px-3 sm:py-2 rounded-xl text-slate-100 hover:text-white hover:bg-slate-700/80 disabled:opacity-20 disabled:pointer-events-none active:scale-90 transition font-bold"
+              title="Làm lại (Redo) - Ctrl+Y"
+              aria-label="Làm lại"
             >
-              <Redo2 className="w-3.5 h-3.5 sm:w-4 sm:h-4" />
+              <Redo2 className="w-5 h-5 sm:w-6 sm:h-6 stroke-[2.5]" />
+              <span className="hidden xl:inline text-xs font-bold">Redo</span>
             </button>
           </div>
 
@@ -315,6 +327,18 @@ export const Header: React.FC<HeaderProps> = ({ onOpenProjects, onOpenExport, on
           <div className="hidden sm:block">
             <PWAInstallButton />
           </div>
+
+          {/* Share App Button (Desktop & Tablet) */}
+          {onOpenShareApp && (
+            <button
+              onClick={onOpenShareApp}
+              className="hidden sm:flex items-center gap-1.5 px-2.5 py-1.5 rounded-xl bg-slate-800/90 hover:bg-slate-750 border border-slate-700/70 text-pink-300 hover:text-pink-200 text-xs font-semibold active:scale-95 transition shadow-sm"
+              title="Chia sẻ ứng dụng cho bạn bè"
+            >
+              <Share2 className="w-3.5 h-3.5 text-pink-400" />
+              <span>Chia sẻ app</span>
+            </button>
+          )}
 
           {/* Theme Toggle (desktop/tablet) */}
           <button
@@ -396,6 +420,20 @@ export const Header: React.FC<HeaderProps> = ({ onOpenProjects, onOpenExport, on
                   <Edit2 className="w-4 h-4 text-slate-400 shrink-0" />
                   <span>Đổi tên dự án</span>
                 </button>
+
+                {/* Share App Option in Mobile Menu */}
+                {onOpenShareApp && (
+                  <button
+                    onClick={() => {
+                      setIsMenuOpen(false);
+                      onOpenShareApp();
+                    }}
+                    className="w-full flex items-center gap-2.5 px-2.5 py-2 rounded-xl hover:bg-slate-800 text-pink-300 text-left transition font-medium"
+                  >
+                    <Share2 className="w-4 h-4 text-pink-400 shrink-0" />
+                    <span>Chia sẻ ứng dụng</span>
+                  </button>
+                )}
 
                 {/* Discard Project Option in Mobile Menu */}
                 {layers.length > 0 && (

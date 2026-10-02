@@ -68,6 +68,92 @@ export const BeautyLiveControls: React.FC<BeautyLiveControlsProps> = ({
       {/* Expanded Controls Drawer */}
       {isOpen && (
         <div className="w-full bg-slate-950/90 backdrop-blur-2xl border border-white/20 rounded-3xl p-3 mb-2 text-white shadow-2xl animate-in slide-in-from-bottom duration-200 space-y-2.5">
+          {/* Quick Snow Beauty Presets for Social Media */}
+          <div className="space-y-1">
+            <span className="text-[10px] text-pink-300 font-bold uppercase tracking-wider px-1">
+              Chế độ chụp đẹp SNOW (Ưu tiên MXH):
+            </span>
+            <div className="grid grid-cols-3 sm:grid-cols-5 gap-1.5">
+              {[
+                {
+                  id: 'snow_social_sparkle',
+                  name: '✨ Snow Idol',
+                  sub: 'Mặc định MXH',
+                  smooth: 55,
+                  whiten: 40,
+                  glow: 35,
+                  slimFace: 30,
+                  snowFilter: 'snow_peach' as SnowFilterTone,
+                },
+                {
+                  id: 'snow_glass',
+                  name: '💧 Glass Skin',
+                  sub: 'Căng bóng Hàn',
+                  smooth: 60,
+                  whiten: 45,
+                  glow: 50,
+                  slimFace: 30,
+                  snowFilter: 'snow_dewy' as SnowFilterTone,
+                },
+                {
+                  id: 'snow_cherry',
+                  name: '🌸 Cherry',
+                  sub: 'Trắng hồng',
+                  smooth: 55,
+                  whiten: 48,
+                  glow: 32,
+                  slimFace: 25,
+                  snowFilter: 'snow_cherry' as SnowFilterTone,
+                },
+                {
+                  id: 'snow_kira',
+                  name: '🌟 Kira Kira',
+                  sub: 'Lấp lánh',
+                  smooth: 50,
+                  whiten: 35,
+                  glow: 40,
+                  slimFace: 25,
+                  snowFilter: 'snow_kirakira' as SnowFilterTone,
+                },
+                {
+                  id: 'natural',
+                  name: '🌿 Tự nhiên',
+                  sub: 'Mộc nhẹ',
+                  smooth: 25,
+                  whiten: 15,
+                  glow: 15,
+                  slimFace: 10,
+                  snowFilter: 'none' as SnowFilterTone,
+                },
+              ].map((p) => {
+                const isSelected = settings.presetId === p.id;
+                return (
+                  <button
+                    key={p.id}
+                    onClick={() =>
+                      onChange({
+                        presetId: p.id,
+                        smooth: p.smooth,
+                        whiten: p.whiten,
+                        glow: p.glow,
+                        slimFace: p.slimFace,
+                        snowFilter: p.snowFilter,
+                      })
+                    }
+                    className={`py-1.5 px-1 rounded-xl text-center transition active:scale-95 border flex flex-col items-center justify-center ${
+                      isSelected
+                        ? 'bg-gradient-to-r from-pink-500 to-rose-500 border-pink-400 text-white shadow-md shadow-pink-500/30'
+                        : 'bg-white/5 border-white/10 text-slate-300 hover:text-white hover:bg-white/10'
+                    }`}
+                  >
+                    <span className="text-[11px] font-bold leading-tight truncate w-full">{p.name}</span>
+                    <span className="text-[9px] text-pink-200/80 leading-tight">{p.sub}</span>
+                  </button>
+                );
+              })}
+            </div>
+          </div>
+
           {/* Tabs Selector: SNOW Filters, AR Stickers, Retouch */}
           <div className="flex items-center justify-center gap-1 p-0.5 bg-white/10 rounded-2xl">
             <button

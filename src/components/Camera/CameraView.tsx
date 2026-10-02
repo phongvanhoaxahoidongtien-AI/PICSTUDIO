@@ -57,16 +57,16 @@ export const CameraView: React.FC<CameraViewProps> = ({
   const [aspectRatio, setAspectRatio] = useState<'3:4' | '9:16' | '1:1'>('3:4');
   const [isTimestampOn, setIsTimestampOn] = useState(true);
 
-  // Live Beauty & Filter state
+  // Live Beauty & Filter state (Defaulting to social-media-ready sparkling SNOW look)
   const [liveBeauty, setLiveBeauty] = useState<LiveBeautySettings>({
-    smooth: 35,
-    whiten: 20,
-    glow: 20,
-    slimFace: 20,
+    smooth: 55, // Da láng mịn che khuyết điểm Meitu/Snow
+    whiten: 40, // Sáng bừng tone da trắng sứ tự nhiên
+    glow: 35, // Căng bóng sương mai lung linh bắt sáng
+    slimFace: 30, // Thon gọn cằm V-line tự nhiên
     filterId: 'normal',
-    snowFilter: 'snow_peach',
+    snowFilter: 'snow_peach', // Tone Baby Peach làm sáng da, ửng hồng ngọt ngào
     arEffect: 'none',
-    presetId: 'natural',
+    presetId: 'snow_social_sparkle',
   });
   const [isBeautyControlsOpen, setIsBeautyControlsOpen] = useState(false);
 
@@ -265,18 +265,26 @@ export const CameraView: React.FC<CameraViewProps> = ({
           if (liveBeauty.whiten > 0 || liveBeauty.glow > 0 || liveBeauty.smooth > 0) {
             ctx.save();
             if (liveBeauty.whiten > 0 || liveBeauty.glow > 0) {
-              const whitenAlpha = (liveBeauty.whiten / 100) * 0.22;
-              const glowAlpha = (liveBeauty.glow / 100) * 0.18;
+              const whitenAlpha = (liveBeauty.whiten / 100) * 0.26;
+              const glowAlpha = (liveBeauty.glow / 100) * 0.22;
               ctx.globalCompositeOperation = 'screen';
-              ctx.fillStyle = `rgba(255, 245, 245, ${(whitenAlpha + glowAlpha).toFixed(2)})`;
+              ctx.fillStyle = `rgba(255, 245, 248, ${(whitenAlpha + glowAlpha).toFixed(2)})`;
               ctx.fillRect(0, 0, targetW, targetH);
+
+              // Subtle sparkling soft-light bloom for social-media radiance
+              if (liveBeauty.glow > 25) {
+                const bloomAlpha = (liveBeauty.glow / 100) * 0.16;
+                ctx.globalCompositeOperation = 'soft-light';
+                ctx.fillStyle = `rgba(255, 220, 230, ${bloomAlpha.toFixed(2)})`;
+                ctx.fillRect(0, 0, targetW, targetH);
+              }
             }
 
             if (liveBeauty.smooth > 0) {
-              const smoothAlpha = (liveBeauty.smooth / 100) * 0.35;
+              const smoothAlpha = (liveBeauty.smooth / 100) * 0.38;
               ctx.globalCompositeOperation = 'soft-light';
               ctx.globalAlpha = smoothAlpha;
-              ctx.filter = `blur(${Math.max(2, Math.round(targetW / 350))}px)`;
+              ctx.filter = `blur(${Math.max(2, Math.round(targetW / 320))}px)`;
               ctx.drawImage(canvas, 0, 0);
             }
             ctx.restore();

@@ -7,6 +7,8 @@ export const DEFAULT_ADJUSTMENTS: ImageAdjustments = {
   exposure: 0,
   highlights: 0,
   shadows: 0,
+  whites: 0,
+  blacks: 0,
   temperature: 0,
   tint: 0,
   sharpness: 0,
@@ -93,6 +95,8 @@ export function applyAdjustments(
     adjustments.exposure !== 0 ||
     adjustments.highlights !== 0 ||
     adjustments.shadows !== 0 ||
+    (adjustments.whites !== undefined && adjustments.whites !== 0) ||
+    (adjustments.blacks !== undefined && adjustments.blacks !== 0) ||
     adjustments.temperature !== 0 ||
     adjustments.tint !== 0 ||
     adjustments.sharpness !== 0 ||
@@ -115,6 +119,8 @@ export function applyAdjustments(
   const exposure = adjustments.exposure * intensity;
   const highlights = adjustments.highlights * intensity;
   const shadows = adjustments.shadows * intensity;
+  const whites = (adjustments.whites ?? 0) * intensity;
+  const blacks = (adjustments.blacks ?? 0) * intensity;
   const temp = adjustments.temperature * intensity;
   const tint = adjustments.tint * intensity;
   const vignette = adjustments.vignette * intensity;
@@ -190,6 +196,24 @@ export function applyAdjustments(
       r += hFactor;
       g += hFactor;
       b += hFactor;
+    }
+
+    // Whites adjustment (Windows 11 Photos: bright highlight compression / expansion, lum > 170)
+    if (whites !== 0 && lum > 170) {
+      const whiteWeight = (lum - 170) / 85;
+      const wFactor = (whites / 100) * 45 * whiteWeight;
+      r += wFactor;
+      g += wFactor;
+      b += wFactor;
+    }
+
+    // Blacks adjustment (Windows 11 Photos: deep shadow stretch / lift, lum < 85)
+    if (blacks !== 0 && lum < 85) {
+      const blackWeight = (85 - lum) / 85;
+      const blkFactor = (blacks / 100) * 45 * blackWeight;
+      r += blkFactor;
+      g += blkFactor;
+      b += blkFactor;
     }
 
     // 5. Clarity (Midtone micro-contrast)
@@ -362,3 +386,215 @@ export function calculateAutoEnhance(ctx: CanvasRenderingContext2D, width: numbe
     sharpness: 15,
   };
 }
+
+export interface WindowsPhotosPreset {
+  id: string;
+  name: string;
+  nameVi: string;
+  description: string;
+  previewBg: string;
+  adjustments: Partial<ImageAdjustments>;
+}
+
+export const WINDOWS_PHOTOS_PRESETS: WindowsPhotosPreset[] = [
+  {
+    id: 'original',
+    name: 'Original',
+    nameVi: 'Gốc',
+    description: 'Ảnh gốc không hiệu ứng',
+    previewBg: 'bg-slate-700',
+    adjustments: {
+      exposure: 0,
+      brightness: 0,
+      contrast: 0,
+      highlights: 0,
+      shadows: 0,
+      whites: 0,
+      blacks: 0,
+      saturation: 0,
+      temperature: 0,
+      tint: 0,
+      clarity: 0,
+      sharpness: 0,
+      vignette: 0,
+    },
+  },
+  {
+    id: 'auto_enhance',
+    name: 'Enhance',
+    nameVi: 'Tối ưu tự động',
+    description: 'Tự động cân bằng sáng và màu sắc thông minh như Photos Win 10/11',
+    previewBg: 'bg-gradient-to-tr from-amber-500 to-rose-500',
+    adjustments: {
+      exposure: 8,
+      contrast: 18,
+      saturation: 16,
+      clarity: 14,
+      highlights: -12,
+      shadows: 18,
+      whites: 10,
+      blacks: -10,
+      sharpness: 18,
+    },
+  },
+  {
+    id: 'sauna',
+    name: 'Sauna',
+    nameVi: 'Ấm áp (Sauna)',
+    description: 'Tông màu cam vàng ấm áp, gợi cảm giác hoàng hôn và thư giãn',
+    previewBg: 'bg-gradient-to-tr from-amber-600 to-orange-400',
+    adjustments: {
+      temperature: 35,
+      tint: 8,
+      saturation: 15,
+      contrast: 10,
+      highlights: -8,
+      shadows: 14,
+      whites: 12,
+      blacks: -6,
+      clarity: 8,
+    },
+  },
+  {
+    id: 'neo',
+    name: 'Neo',
+    nameVi: 'Hiện đại (Neo)',
+    description: 'Độ tương phản cao, phong cách thành thị sắc sảo hiện đại',
+    previewBg: 'bg-gradient-to-tr from-cyan-600 to-indigo-600',
+    adjustments: {
+      contrast: 28,
+      clarity: 22,
+      saturation: 8,
+      exposure: 5,
+      highlights: -18,
+      shadows: -14,
+      whites: 15,
+      blacks: -22,
+      sharpness: 24,
+    },
+  },
+  {
+    id: 'slate',
+    name: 'Slate',
+    nameVi: 'Phiến đá (Slate)',
+    description: 'Tông lạnh trung tính trầm tĩnh, phong cách phim điện ảnh Bắc Âu',
+    previewBg: 'bg-gradient-to-tr from-slate-600 to-teal-700',
+    adjustments: {
+      temperature: -24,
+      tint: -10,
+      saturation: -18,
+      contrast: 16,
+      shadows: 10,
+      highlights: -15,
+      clarity: 15,
+      whites: 8,
+      blacks: -8,
+    },
+  },
+  {
+    id: 'vanilla',
+    name: 'Vanilla',
+    nameVi: 'Vani (Vanilla)',
+    description: 'Sáng trong trẻo, nhẹ nhàng êm dịu phong cách pastel thanh lịch',
+    previewBg: 'bg-gradient-to-tr from-yellow-200 to-pink-200',
+    adjustments: {
+      exposure: 15,
+      brightness: 12,
+      contrast: -8,
+      saturation: -10,
+      temperature: 12,
+      highlights: -20,
+      shadows: 25,
+      whites: 18,
+      blacks: 15,
+      clarity: -6,
+    },
+  },
+  {
+    id: 'icarus',
+    name: 'Icarus',
+    nameVi: 'Rực rỡ (Icarus)',
+    description: 'Ánh nắng mặt trời chói chang vàng rực, độ bão hòa cao',
+    previewBg: 'bg-gradient-to-tr from-yellow-500 to-red-500',
+    adjustments: {
+      temperature: 28,
+      saturation: 32,
+      contrast: 15,
+      exposure: 8,
+      highlights: -10,
+      shadows: 10,
+      whites: 20,
+      blacks: -12,
+    },
+  },
+  {
+    id: 'rouge',
+    name: 'Rouge',
+    nameVi: 'Hồng phấn (Rouge)',
+    description: 'Phớt hồng ngọt ngào, làm da tươi tắn rạng ngời tự nhiên',
+    previewBg: 'bg-gradient-to-tr from-pink-500 to-rose-400',
+    adjustments: {
+      tint: 28,
+      temperature: 8,
+      saturation: 18,
+      exposure: 10,
+      contrast: 12,
+      shadows: 16,
+      whites: 15,
+      clarity: 6,
+    },
+  },
+  {
+    id: 'zeke',
+    name: 'Zeke',
+    nameVi: 'Đen trắng sâu (Zeke)',
+    description: 'Ảnh đen trắng nghệ thuật kịch tính với độ tương phản sắc bén',
+    previewBg: 'bg-gradient-to-tr from-zinc-900 to-zinc-400',
+    adjustments: {
+      saturation: -100,
+      contrast: 38,
+      clarity: 28,
+      exposure: 4,
+      highlights: -15,
+      shadows: -20,
+      whites: 25,
+      blacks: -35,
+      sharpness: 30,
+    },
+  },
+  {
+    id: 'mercury',
+    name: 'Mercury',
+    nameVi: 'Ánh bạc (Mercury)',
+    description: 'Đen trắng ánh bạc dịu dàng, dải chuyển sắc mịn màng cổ điển',
+    previewBg: 'bg-gradient-to-tr from-gray-500 to-gray-300',
+    adjustments: {
+      saturation: -100,
+      contrast: 10,
+      exposure: 8,
+      highlights: -25,
+      shadows: 20,
+      whites: 10,
+      blacks: 10,
+      clarity: 5,
+    },
+  },
+  {
+    id: 'denim',
+    name: 'Denim',
+    nameVi: 'Xanh Jean (Denim)',
+    description: 'Tông màu xanh dương chàm đậm đà cá tính của quần jean cổ điển',
+    previewBg: 'bg-gradient-to-tr from-blue-700 to-indigo-900',
+    adjustments: {
+      temperature: -36,
+      tint: 12,
+      saturation: -12,
+      contrast: 22,
+      shadows: -10,
+      whites: 12,
+      blacks: -15,
+      vignette: 18,
+    },
+  },
+];
+
