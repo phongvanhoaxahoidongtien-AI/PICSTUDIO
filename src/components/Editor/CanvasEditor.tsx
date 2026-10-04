@@ -67,6 +67,9 @@ export const CanvasEditor: React.FC<CanvasEditorProps> = ({
     brushOpacity,
     isEraser,
     eraserMode,
+    isAiEraser,
+    aiMaskPoints,
+    setAiMaskPoints,
     setSingleImage,
     addLayer,
     pushHistory,
@@ -620,6 +623,13 @@ export const CanvasEditor: React.FC<CanvasEditorProps> = ({
       const { x, y } = screenToCanvas(e.clientX, e.clientY);
       setCursorPos({ x, y, visible: true });
 
+      // If in AI Eraser mode: Add points to AI mask for smart object removal
+      if (isAiEraser) {
+        isDrawingRef.current = true;
+        setAiMaskPoints((prev) => [...prev, { x, y, size: brushSize }]);
+        return;
+      }
+
       // If in Stroke Eraser mode: Erase any stroke directly touched
       if (isEraser && eraserMode === 'stroke') {
         isDrawingRef.current = true;
@@ -716,6 +726,18 @@ export const CanvasEditor: React.FC<CanvasEditorProps> = ({
       setCursorPos({ x, y, visible: true });
 
       if (isDrawingRef.current) {
+        if (isAiEraser) {
+          // Add points to AI mask continuously while dragging
+          setAiMaskPoints((prev) => {
+            const last = prev[prev.length - 1];
+            if (!last || Math.hypot(x - last.x, y - last.y) >= 4) {
+              return [...prev, { x, y, size: brushSize }];
+            }
+            return prev;
+          });
+          return;
+        }
+
         if (isEraser && eraserMode === 'stroke') {
           // Sweep erase strokes under finger/cursor
           eraseStrokeAt(x, y, Math.max(16, brushSize / 2));
@@ -822,7 +844,9 @@ export const CanvasEditor: React.FC<CanvasEditorProps> = ({
     }
     if (isDrawingRef.current) {
       isDrawingRef.current = false;
-      pushHistory();
+      if (!isAiEraser) {
+        pushHistory();
+      }
     }
     if (isDraggingLayer) {
       setIsDraggingLayer(false);
@@ -1087,6 +1111,40 @@ export const CanvasEditor: React.FC<CanvasEditorProps> = ({
             className="w-full h-full block rounded-sm cursor-crosshair"
           />
 
+          {/* AI Inpainting Mask Overlay */}
+          {activeTool === 'draw' && isAiEraser && aiMaskPoints.length > 0 && (
+            <svg
+              className="absolute inset-0 pointer-events-none z-30 overflow-visible"
+              style={{ width: `${canvasWidth * zoom}px`, height: `${canvasHeight * zoom}px` }}
+              viewBox={`0 0 ${canvasWidth} ${canvasHeight}`}
+            >
+              {aiMaskPoints.map((pt, idx) => (
+                <circle
+                  key={`c-${idx}`}
+                  cx={pt.x}
+                  cy={pt.y}
+                  r={pt.size / 2}
+                  fill="rgba(244, 63, 94, 0.45)"
+                />
+              ))}
+              {aiMaskPoints.slice(1).map((pt, idx) => {
+                const prev = aiMaskPoints[idx];
+                return (
+                  <line
+                    key={`l-${idx}`}
+                    x1={prev.x}
+                    y1={prev.y}
+                    x2={pt.x}
+                    y2={pt.y}
+                    stroke="rgba(244, 63, 94, 0.45)"
+                    strokeWidth={pt.size}
+                    strokeLinecap="round"
+                  />
+                );
+              })}
+            </svg>
+          )}
+
           {/* Real-time Brush & Eraser Size Indicator Ring */}
           {activeTool === 'draw' && cursorPos.visible && (
             <div
@@ -1098,13 +1156,15 @@ export const CanvasEditor: React.FC<CanvasEditorProps> = ({
                 transform: 'translate(-50%, -50%)',
               }}
               className={`absolute pointer-events-none rounded-full transition-transform duration-75 z-40 ${
-                isEraser
+                isAiEraser
+                  ? 'border-2 border-amber-400 bg-amber-400/25 shadow-lg shadow-amber-500/40 animate-pulse'
+                  : isEraser
                   ? 'border-2 border-rose-500 bg-rose-500/20 shadow-md shadow-rose-500/30'
                   : 'border-2 border-white/90 shadow-md shadow-black/40'
               }`}
             >
               <div
-                style={{ backgroundColor: isEraser ? '#f43f5e' : brushColor }}
+                style={{ backgroundColor: isAiEraser ? '#fbbf24' : isEraser ? '#f43f5e' : brushColor }}
                 className="w-1.5 h-1.5 rounded-full absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2"
               />
             </div>

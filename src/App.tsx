@@ -97,10 +97,10 @@ export default function App() {
       src: dataUrl,
       originalWidth: width,
       originalHeight: height,
-      x: layerX,
-      y: layerY,
-      width: layerW,
-      height: layerH,
+      x: 0,
+      y: 0,
+      width: width,
+      height: height,
       rotation: 0,
       scaleX: 1,
       scaleY: 1,
@@ -124,24 +124,20 @@ export default function App() {
       },
       beauty: {
         ...DEFAULT_BEAUTY_SETTINGS,
-        smooth: liveSettings?.smooth ?? 55,
-        whiten: liveSettings?.whiten ?? 40,
-        glow: liveSettings?.glow ?? 35,
-        presetId: liveSettings?.presetId || 'snow_baby',
+        smooth: liveSettings?.smooth ?? 0,
+        whiten: liveSettings?.whiten ?? 0,
+        glow: liveSettings?.glow ?? 0,
+        presetId: liveSettings?.presetId || 'none',
       },
       filterId: liveSettings?.filterId || 'normal',
       filterIntensity: 100,
     };
 
-    if (isMultiLayerMode) {
-      addLayer(newLayer);
-    } else {
-      // Default Single Image Mode (iOS/Android native style: 100% natural resolution)
-      setSingleImage(newLayer, width, height, `Ảnh chụp ${timeStr}`);
-    }
+    // Native single image editing: 100% full original resolution, no sub-layers
+    setSingleImage(newLayer, width, height, `Ảnh chụp ${timeStr}`);
 
     setAppMode('editor');
-    setActiveTool('beauty');
+    setActiveTool('none');
 
     setTimeout(() => {
       window.dispatchEvent(new CustomEvent('lumix:fit-to-screen'));
@@ -437,26 +433,32 @@ export default function App() {
     return () => window.removeEventListener('keydown', handleKeyDown);
   }, [undo, redo, setActiveTool, activeLayerId, removeLayer]);
 
-  // Apply Crop Callback
-  const handleApplyCrop = (croppedCanvas: HTMLCanvasElement) => {
+  // Apply Crop Callback (100% Native Resolution, No Quality Loss)
+  const handleApplyCrop = (croppedCanvas: HTMLCanvasElement, mimeType = 'image/jpeg') => {
     const targetLayer = layers.find((l) => l.id === activeLayerId) || layers.find((l) => l.type === 'image');
     if (!targetLayer) return;
 
     pushHistory();
-    const newSrc = croppedCanvas.toDataURL('image/jpeg', 0.95);
+    const newSrc = croppedCanvas.toDataURL(mimeType, 1.0);
     updateLayer(targetLayer.id, {
       src: newSrc,
+      originalWidth: croppedCanvas.width,
+      originalHeight: croppedCanvas.height,
       width: croppedCanvas.width,
       height: croppedCanvas.height,
+      x: 0,
+      y: 0,
       rotation: 0,
       scaleX: 1,
       scaleY: 1,
     });
-    // If single layer, also match canvas dimensions
-    if (layers.length === 1) {
-      setCanvasDimensions(croppedCanvas.width, croppedCanvas.height);
-    }
+    // Set exact native dimensions for the cropped photo
+    setCanvasDimensions(croppedCanvas.width, croppedCanvas.height);
     setActiveTool('none');
+
+    setTimeout(() => {
+      window.dispatchEvent(new CustomEvent('lumix:fit-to-screen'));
+    }, 40);
   };
 
   return (

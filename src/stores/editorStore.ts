@@ -77,11 +77,16 @@ interface EditorState {
   brushOpacity: number;
   isEraser: boolean;
   eraserMode: 'pixel' | 'stroke';
+  isAiEraser: boolean;
+  aiMaskPoints: { x: number; y: number; size: number }[];
   setBrushColor: (color: string) => void;
   setBrushSize: (size: number) => void;
   setBrushOpacity: (opacity: number) => void;
   setIsEraser: (isEraser: boolean) => void;
   setEraserMode: (mode: 'pixel' | 'stroke') => void;
+  setIsAiEraser: (isAiEraser: boolean) => void;
+  setAiMaskPoints: (points: { x: number; y: number; size: number }[] | ((prev: { x: number; y: number; size: number }[]) => { x: number; y: number; size: number }[])) => void;
+  clearAiMask: () => void;
 
   // Collage tool state
   collageConfig: CollageConfig;
@@ -410,11 +415,19 @@ export const useEditorStore = create<EditorState>((set, get) => ({
   brushOpacity: 1,
   isEraser: false,
   eraserMode: 'pixel',
+  isAiEraser: false,
+  aiMaskPoints: [],
   setBrushColor: (color) => set({ brushColor: color }),
   setBrushSize: (size) => set({ brushSize: size }),
   setBrushOpacity: (opacity) => set({ brushOpacity: opacity }),
-  setIsEraser: (isEraser) => set({ isEraser }),
+  setIsEraser: (isEraser) => set({ isEraser, isAiEraser: false }),
   setEraserMode: (mode) => set({ eraserMode: mode }),
+  setIsAiEraser: (isAiEraser) => set({ isAiEraser, isEraser: false }),
+  setAiMaskPoints: (pointsOrFn) =>
+    set((state) => ({
+      aiMaskPoints: typeof pointsOrFn === 'function' ? pointsOrFn(state.aiMaskPoints) : pointsOrFn,
+    })),
+  clearAiMask: () => set({ aiMaskPoints: [] }),
 
   collageConfig: {
     layout: 'freeform',
