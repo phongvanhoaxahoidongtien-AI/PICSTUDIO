@@ -4,6 +4,7 @@ export type ToolType =
   | 'crop'
   | 'adjust'
   | 'filters'
+  | 'timemark'
   | 'text'
   | 'collage'
   | 'draw'
@@ -11,6 +12,56 @@ export type ToolType =
   | 'layers'
   | 'export'
   | 'projects';
+
+export type TimeMarkTemplateId = 
+  | 'attendance'   // Chấm công / Điểm danh chuẩn TimeMark
+  | 'survey'       // Khảo sát hiện trường / Công trình
+  | 'inspection'   // Kiểm tra an toàn / Tuần tra hiện trường
+  | 'progress'     // Nhật ký thi công / Tiến độ công việc
+  | 'travel'       // Du lịch & Check-in thời tiết
+  | 'classic'      // Cổ điển vàng kim TimeMark
+  | 'digital'      // Đồng hồ số LED Film Retro
+  | 'official'     // Dấu mộc đỏ chứng thực pháp lý
+  | 'minimal'      // Tối giản hiện đại
+  | 'weather_pro'; // Báo cáo thời tiết & môi trường
+
+export type TimeMarkPosition = 'bottom-left' | 'bottom-right' | 'top-left' | 'top-right' | 'bottom-center';
+
+export interface TimeMarkConfig {
+  enabled: boolean;
+  templateId: TimeMarkTemplateId;
+  position: TimeMarkPosition;
+  showDate: boolean;
+  showTime: boolean;
+  showSeconds: boolean;
+  showLunarDate: boolean;
+  showLocation: boolean;
+  showCoordinates: boolean;
+  showAltitude: boolean;
+  showCompass: boolean;
+  showWeather: boolean;
+  showTemperature: boolean;
+  showProjectName: boolean;
+  showAuthor: boolean;
+  showInspectionBadge: boolean;
+  inspectionStatus: string; // 'ĐẠT CHUẨN' | 'BÌNH THƯỜNG' | 'CẦN KIỂM TRA'
+  locationName: string;
+  address: string;
+  latitude: number | null;
+  longitude: number | null;
+  altitude: number | null;
+  azimuth?: number | null; // Compass heading 0-360 deg
+  weather: string;
+  temperature: string;
+  projectName: string;
+  author: string;
+  customDate?: string;
+  customTime?: string;
+  scale: number; // 0.7 to 1.5
+  textColor: string;
+  themeColor: string;
+  bgOpacity: number; // 0 to 1
+}
 
 export interface ImageAdjustments {
   brightness: number;    // -100 to 100

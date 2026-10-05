@@ -27,6 +27,8 @@ import {
   drawSnowArSticker,
   drawSnowTimestamp,
 } from '../../utils/snowCameraEffects';
+import { drawTimeMarkWatermark } from '../../utils/timemark';
+import { useEditorStore } from '../../stores/editorStore';
 import { saveProject } from '../../services/db';
 import type { DetectedFace, ProjectData } from '../../types';
 
@@ -65,18 +67,22 @@ export const CameraView: React.FC<CameraViewProps> = ({
 
   // Aspect ratio options
   const [aspectRatio, setAspectRatio] = useState<'3:4' | '9:16' | '1:1'>('3:4');
-  const [isTimestampOn, setIsTimestampOn] = useState(false); // Default false for pure photo
+  // TimeMark & Timestamp
+  const { timeMarkConfig } = useEditorStore();
+  const [isTimeMarkOn, setIsTimeMarkOn] = useState(false);
+  const [isTimestampOn, setIsTimestampOn] = useState(false);
 
-  // Live Beauty & Filter state
+  // Live Beauty & Filter state (Photo Wonder & SNOW Defaults)
   const [liveBeauty, setLiveBeauty] = useState<LiveBeautySettings>({
-    smooth: 0,
-    whiten: 0,
-    glow: 0,
-    slimFace: 0,
+    smooth: 65,
+    whiten: 48,
+    glow: 40,
+    brightnessBoost: 30,
+    slimFace: 30,
     filterId: 'normal',
-    snowFilter: 'none',
+    snowFilter: 'snow_peach',
     arEffect: 'none',
-    presetId: 'natural',
+    presetId: 'wonder_sweet',
   });
   const [isBeautyControlsOpen, setIsBeautyControlsOpen] = useState(false);
 
@@ -357,7 +363,17 @@ export const CameraView: React.FC<CameraViewProps> = ({
 
             // Only apply beauty passes and overlays when in 'beauty' mode
             if (cameraShootingMode === 'beauty') {
-              // 1. Live beauty pass (Whitening + Soft Glow + Live Skin Smooth)
+              // 1. Photo Wonder & SNOW Brightness / Exposure boost (brightens indoor & dark skin)
+              if ((liveBeauty.brightnessBoost ?? 0) > 0) {
+                const boostAlpha = ((liveBeauty.brightnessBoost ?? 25) / 100) * 0.35;
+                ctx.save();
+                ctx.globalCompositeOperation = 'screen';
+                ctx.fillStyle = `rgba(255, 250, 245, ${boostAlpha.toFixed(2)})`;
+                ctx.fillRect(0, 0, targetW, targetH);
+                ctx.restore();
+              }
+
+              // 2. Live beauty pass (Whitening + Soft Glow + Live Skin Smooth)
               if (liveBeauty.whiten > 0 || liveBeauty.glow > 0 || liveBeauty.smooth > 0) {
                 ctx.save();
                 if (liveBeauty.whiten > 0 || liveBeauty.glow > 0) {
@@ -378,12 +394,12 @@ export const CameraView: React.FC<CameraViewProps> = ({
                 ctx.restore();
               }
 
-              // 2. Live Color Filters
+              // 3. Live Color Filters
               if (liveBeauty.snowFilter && liveBeauty.snowFilter !== 'none') {
                 applySnowFilter(ctx, targetW, targetH, liveBeauty.snowFilter);
               }
 
-              // 3. Generic Filters Preset
+              // 4. Generic Filters Preset
               if (liveBeauty.filterId !== 'normal') {
                 const preset = FILTER_PRESETS.find((f) => f.id === liveBeauty.filterId);
                 if (preset) {
@@ -406,15 +422,20 @@ export const CameraView: React.FC<CameraViewProps> = ({
                 }
               }
 
-              // 4. Live AR Face Stickers
+              // 5. Live AR Face Stickers
               if (liveBeauty.arEffect && liveBeauty.arEffect !== 'none') {
                 drawSnowArSticker(ctx, targetW, targetH, liveBeauty.arEffect, detectedFaces[0]);
               }
 
-              // 5. Date/Timestamp Watermark
-              if (isTimestampOn) {
+              // 6. Simple Date/Timestamp Watermark
+              if (isTimestampOn && !isTimeMarkOn) {
                 drawSnowTimestamp(ctx, targetW, targetH);
               }
+            }
+
+            // 7. TimeMark Watermark Badge Live Preview
+            if (isTimeMarkOn) {
+              drawTimeMarkWatermark(ctx, targetW, targetH, timeMarkConfig);
             }
 
             // Periodic Face Detection (every 280ms)
@@ -537,12 +558,77 @@ export const CameraView: React.FC<CameraViewProps> = ({
     snapCtx.restore();
 
     if (cameraShootingMode === 'beauty') {
+      // 1. Photo Wonder & SNOW Brightness / Exposure boost (brightens indoor & dark skin)
+      if ((liveBeauty.brightnessBoost ?? 0) > 0) {
+        const boostAlpha = ((liveBeauty.brightnessBoost ?? 25) / 100) * 0.35;
+        snapCtx.save();
+        snapCtx.globalCompositeOperation = 'screen';
+        snapCtx.fillStyle = `rgba(255, 250, 245, ${boostAlpha.toFixed(2)})`;
+        snapCtx.fillRect(0, 0, sWidth, sHeight);
+        snapCtx.restore();
+      }
+
+      // 2. Whitening + Soft Glow
+      if (liveBeauty.whiten > 0 || liveBeauty.glow > 0) {
+        const whitenAlpha = (liveBeauty.whiten / 100) * 0.22;
+        const glowAlpha = (liveBeauty.glow / 100) * 0.18;
+        snapCtx.save();
+        snapCtx.globalCompositeOperation = 'screen';
+        snapCtx.fillStyle = `rgba(255, 245, 248, ${(whitenAlpha + glowAlpha).toFixed(2)})`;
+        snapCtx.fillRect(0, 0, sWidth, sHeight);
+        snapCtx.restore();
+      }
+
+      // 3. Smooth skin pass
+      if (liveBeauty.smooth > 0) {
+        const smoothAlpha = (liveBeauty.smooth / 100) * 0.35;
+        snapCtx.save();
+        snapCtx.globalCompositeOperation = 'soft-light';
+        snapCtx.globalAlpha = smoothAlpha;
+        snapCtx.filter = `blur(${Math.max(2, Math.round(sWidth / 360))}px)`;
+        snapCtx.drawImage(snapCanvas, 0, 0);
+        snapCtx.restore();
+      }
+
+      // 4. Color / Snow Filter
       if (liveBeauty.snowFilter && liveBeauty.snowFilter !== 'none') {
         applySnowFilter(snapCtx, sWidth, sHeight, liveBeauty.snowFilter);
       }
-      if (isTimestampOn) {
-        drawSnowTimestamp(snapCtx, sWidth, sHeight);
+
+      // 5. Generic filter
+      if (liveBeauty.filterId !== 'normal') {
+        const preset = FILTER_PRESETS.find((f) => f.id === liveBeauty.filterId);
+        if (preset) {
+          applyAdjustments(snapCtx, sWidth, sHeight, {
+            brightness: preset.adjustments.brightness || 0,
+            contrast: preset.adjustments.contrast || 0,
+            saturation: preset.adjustments.saturation || 0,
+            exposure: preset.adjustments.exposure || 0,
+            highlights: preset.adjustments.highlights || 0,
+            shadows: preset.adjustments.shadows || 0,
+            temperature: preset.adjustments.temperature || 0,
+            tint: preset.adjustments.tint || 0,
+            sharpness: 0,
+            vignette: preset.adjustments.vignette || 0,
+            clarity: 0,
+            blackPoint: 0,
+            gamma: 1.0,
+            whitePoint: 255,
+          }, 0.85);
+        }
       }
+
+      // 6. AR Stickers
+      if (liveBeauty.arEffect && liveBeauty.arEffect !== 'none') {
+        drawSnowArSticker(snapCtx, sWidth, sHeight, liveBeauty.arEffect, detectedFaces[0]);
+      }
+    }
+
+    // 7. TimeMark or Timestamp Watermark
+    if (isTimeMarkOn) {
+      drawTimeMarkWatermark(snapCtx, sWidth, sHeight, timeMarkConfig);
+    } else if (isTimestampOn) {
+      drawSnowTimestamp(snapCtx, sWidth, sHeight);
     }
 
     const dataUrl = snapCanvas.toDataURL('image/jpeg', 0.98);
@@ -663,12 +749,26 @@ export const CameraView: React.FC<CameraViewProps> = ({
               {aspectRatio}
             </button>
 
+            {/* TimeMark Watermark Toggle */}
+            <button
+              onClick={() => setIsTimeMarkOn((t) => !t)}
+              className={`flex items-center gap-1 px-2.5 py-1 rounded-full backdrop-blur-md border text-xs font-semibold transition active:scale-95 ${
+                isTimeMarkOn
+                  ? 'bg-amber-500 border-amber-400 text-slate-950 font-bold shadow-md shadow-amber-500/25'
+                  : 'bg-black/60 border-white/20 text-slate-300 hover:text-white'
+              }`}
+              title="Bật/Tắt con dấu TimeMark (Thời gian & Vị trí) khi chụp"
+            >
+              <Clock className="w-3.5 h-3.5" />
+              <span>TimeMark</span>
+            </button>
+
             {/* Date/Timestamp Toggle */}
             <button
               onClick={() => setIsTimestampOn((t) => !t)}
               className={`flex items-center gap-1 px-2.5 py-1 rounded-full backdrop-blur-md border text-xs font-semibold transition active:scale-95 ${
                 isTimestampOn
-                  ? 'bg-amber-500 border-amber-400 text-slate-950 font-bold'
+                  ? 'bg-pink-600 border-pink-400 text-white font-bold'
                   : 'bg-black/60 border-white/20 text-slate-300 hover:text-white'
               }`}
               title="Dấu ngày giờ trên ảnh"

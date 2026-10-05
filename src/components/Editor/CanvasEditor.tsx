@@ -31,6 +31,7 @@ import { applyAdjustments, downscaleImageIfNeeded } from '../../utils/imageProce
 import { FILTER_PRESETS } from '../../utils/filters';
 import { generateSampleImage } from '../../utils/sampleImages';
 import { applyBeautyEffects, DEFAULT_BEAUTY_SETTINGS } from '../../utils/beautyProcessing';
+import { drawTimeMarkWatermark } from '../../utils/timemark';
 
 interface CanvasEditorProps {
   onOpenFilePicker: () => void;
@@ -73,6 +74,7 @@ export const CanvasEditor: React.FC<CanvasEditorProps> = ({
     setSingleImage,
     addLayer,
     pushHistory,
+    timeMarkConfig,
   } = useEditorStore();
 
   const containerRef = useRef<HTMLDivElement>(null);
@@ -366,6 +368,11 @@ export const CanvasEditor: React.FC<CanvasEditorProps> = ({
 
       ctx.restore();
     }
+
+    // 5. Live preview of TimeMark watermark badge when tool is active or enabled
+    if (activeTool === 'timemark' || timeMarkConfig?.enabled) {
+      drawTimeMarkWatermark(ctx, canvasWidth, canvasHeight, timeMarkConfig);
+    }
   }, [
     layers,
     canvasWidth,
@@ -373,6 +380,8 @@ export const CanvasEditor: React.FC<CanvasEditorProps> = ({
     canvasBackgroundColor,
     isBeforeAfterActive,
     getImage,
+    activeTool,
+    timeMarkConfig,
   ]);
 
   // Serialized render queue to prevent multiple heavy async render passes running concurrently (eliminates device overheating & battery drain!)

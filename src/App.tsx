@@ -16,6 +16,7 @@ import { DrawPanel } from './components/DrawPanel/DrawPanel';
 import { StickersPanel } from './components/StickersPanel/StickersPanel';
 import { LayersPanel } from './components/LayersPanel/LayersPanel';
 import { BeautyPanel } from './components/BeautyPanel/BeautyPanel';
+import { TimeMarkPanel } from './components/TimeMarkPanel/TimeMarkPanel';
 import { CameraView } from './components/Camera/CameraView';
 import type { LiveBeautySettings } from './components/Camera/BeautyLiveControls';
 import { ExportModal } from './components/ExportModal/ExportModal';
@@ -502,6 +503,7 @@ export default function App() {
       {activeTool === 'beauty' && <BeautyPanel />}
       {activeTool === 'adjust' && <AdjustmentsPanel />}
       {activeTool === 'filters' && <FiltersPanel />}
+      {activeTool === 'timemark' && <TimeMarkPanel />}
       {activeTool === 'text' && <TextPanel />}
       {activeTool === 'collage' && <CollagePanel onAddMorePhotos={handleOpenFilePicker} />}
       {activeTool === 'draw' && <DrawPanel />}

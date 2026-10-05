@@ -1,5 +1,14 @@
 import React, { useState, useRef, useEffect, useCallback } from 'react';
-import { Check, X, RotateCcw, RotateCw, FlipHorizontal, FlipVertical } from 'lucide-react';
+import {
+  Check,
+  X,
+  RotateCcw,
+  RotateCw,
+  FlipHorizontal,
+  FlipVertical,
+  Rotate3d,
+  RefreshCw,
+} from 'lucide-react';
 import { useEditorStore } from '../../stores/editorStore';
 import type { ImageLayer } from '../../types';
 
@@ -13,15 +22,18 @@ export const CropOverlay: React.FC<CropOverlayProps> = ({ onApplyCrop, onCancel 
   const activeLayer = (layers.find((l) => l.id === activeLayerId) || layers.find((l) => l.type === 'image')) as ImageLayer | undefined;
 
   const [aspectRatio, setAspectRatio] = useState<number | null>(null); // null = freeform
-  const [rotation, setRotation] = useState(0); // in degrees: 0, 90, 180, 270...
+  const [rotation, setRotation] = useState(0); // 0, 90, 180, 270
   const [flipH, setFlipH] = useState(false);
   const [flipV, setFlipV] = useState(false);
   const [straightenAngle, setStraightenAngle] = useState(0);
+  const [isApplying, setIsApplying] = useState(false);
 
-  // Normalized crop rectangle: 0 to 1 relative to the transformed image
-  const [cropRect, setCropRect] = useState({ x: 0.05, y: 0.05, w: 0.9, h: 0.9 });
+  // Normalized crop rectangle: 0 to 1 relative to rotated canvas. Default 100% (no crop border)
+  const [cropRect, setCropRect] = useState({ x: 0, y: 0, w: 1, h: 1 });
+
   const containerRef = useRef<HTMLDivElement>(null);
-  const imageDisplayRef = useRef<HTMLDivElement>(null);
+  const previewCanvasRef = useRef<HTMLCanvasElement>(null);
+  const imageElementRef = useRef<HTMLImageElement | null>(null);
 
   const isDraggingRef = useRef<{
     handle: string | null;
@@ -32,305 +44,480 @@ export const CropOverlay: React.FC<CropOverlayProps> = ({ onApplyCrop, onCancel 
     handle: null,
     startX: 0,
     startY: 0,
-    startRect: { x: 0, y: 0, w: 0, h: 0 },
+    startRect: { x: 0, y: 0, w: 1, h: 1 },
   });
 
   const normalizedRot = ((rotation % 360) + 360) % 360;
   const isQuarterTurn = normalizedRot === 90 || normalizedRot === 270;
-  
-  const originalWidth = activeLayer?.originalWidth || activeLayer?.width || 1000;
-  const originalHeight = activeLayer?.originalHeight || activeLayer?.height || 1000;
-  const baseAspect = isQuarterTurn
+
+  const originalWidth = activeLayer?.originalWidth || activeLayer?.width || 1200;
+  const originalHeight = activeLayer?.originalHeight || activeLayer?.height || 800;
+  const currentAspect = isQuarterTurn
     ? originalHeight / originalWidth
     : originalWidth / originalHeight;
 
   const aspectPresets = [
     { label: 'Tự do', value: null },
-    { label: 'Gốc', value: baseAspect },
-    { label: '1:1 Vuông', value: 1 },
-    { label: '4:5 (IG)', value: 4 / 5 },
+    { label: 'Gốc', value: currentAspect },
+    { label: '1:1', value: 1 },
+    { label: '4:5', value: 4 / 5 },
     { label: '3:4', value: 3 / 4 },
-    { label: '9:16 (Story)', value: 9 / 16 },
+    { label: '9:16', value: 9 / 16 },
     { label: '16:9', value: 16 / 9 },
     { label: '4:3', value: 4 / 3 },
   ];
 
+  // Pre-load image
+  useEffect(() => {
+    if (!activeLayer) return;
+    const img = new Image();
+    if (!activeLayer.src.startsWith('data:')) {
+      img.crossOrigin = 'anonymous';
+    }
+    img.onload = () => {
+      imageElementRef.current = img;
+      drawPreview();
+    };
+    img.src = activeLayer.src;
+  }, [activeLayer?.src]);
+
+  // Draw live rotated preview on preview canvas
+  const drawPreview = useCallback(() => {
+    const canvas = previewCanvasRef.current;
+    const img = imageElementRef.current;
+    const container = containerRef.current;
+    if (!canvas || !img || !container) return;
+
+    const contW = container.clientWidth - 20;
+    const contH = container.clientHeight - 20;
+    if (contW <= 0 || contH <= 0) return;
+
+    const normRot = ((rotation % 360) + 360) % 360;
+    const totalDeg = normRot + straightenAngle;
+    const totalRad = (totalDeg * Math.PI) / 180;
+
+    const naturalW = img.naturalWidth || originalWidth;
+    const naturalH = img.naturalHeight || originalHeight;
+
+    const cos = Math.abs(Math.cos(totalRad));
+    const sin = Math.abs(Math.sin(totalRad));
+    const rotatedW = Math.round(naturalW * cos + naturalH * sin);
+    const rotatedH = Math.round(naturalW * sin + naturalH * cos);
+
+    // Calculate display dimensions fitting comfortably inside container
+    const scale = Math.min(contW / rotatedW, contH / rotatedH);
+    const dispW = Math.max(120, Math.round(rotatedW * scale));
+    const dispH = Math.max(120, Math.round(rotatedH * scale));
+
+    canvas.width = dispW;
+    canvas.height = dispH;
+    const ctx = canvas.getContext('2d');
+    if (!ctx) return;
+
+    ctx.clearRect(0, 0, dispW, dispH);
+    ctx.imageSmoothingEnabled = true;
+    ctx.imageSmoothingQuality = 'high';
+
+    ctx.save();
+    ctx.translate(dispW / 2, dispH / 2);
+    ctx.rotate(totalRad);
+    ctx.scale(flipH ? -1 : 1, flipV ? -1 : 1);
+
+    const drawW = naturalW * scale;
+    const drawH = naturalH * scale;
+    ctx.drawImage(img, -drawW / 2, -drawH / 2, drawW, drawH);
+    ctx.restore();
+  }, [rotation, straightenAngle, flipH, flipV, originalWidth, originalHeight]);
+
+  useEffect(() => {
+    drawPreview();
+    const handleResize = () => drawPreview();
+    window.addEventListener('resize', handleResize);
+    return () => window.removeEventListener('resize', handleResize);
+  }, [drawPreview]);
+
+  // Handle aspect ratio selection
   const handleSelectAspect = (ratio: number | null) => {
     setAspectRatio(ratio);
     if (ratio !== null) {
       let newW = cropRect.w;
       let newH = newW / ratio;
-      if (newH > 0.95) {
-        newH = 0.95;
+      if (newH > 1.0) {
+        newH = 1.0;
         newW = newH * ratio;
       }
-      if (newW > 0.95) {
-        newW = 0.95;
+      if (newW > 1.0) {
+        newW = 1.0;
         newH = newW / ratio;
       }
       setCropRect({
-        x: Math.max(0.01, (1 - newW) / 2),
-        y: Math.max(0.01, (1 - newH) / 2),
-        w: Math.min(0.98, newW),
-        h: Math.min(0.98, newH),
+        x: Math.max(0, (1 - newW) / 2),
+        y: Math.max(0, (1 - newH) / 2),
+        w: Math.min(1, newW),
+        h: Math.min(1, newH),
       });
     }
   };
 
   const handleRotate = (deg: number) => {
     setRotation((r) => (r + deg) % 360);
-    // Reset crop rect when rotated
-    setCropRect({ x: 0.05, y: 0.05, w: 0.9, h: 0.9 });
+    // Reset crop rect to full image on rotation so 100% is preserved
+    setCropRect({ x: 0, y: 0, w: 1, h: 1 });
+  };
+
+  const handleResetCrop = () => {
+    setAspectRatio(null);
+    setRotation(0);
+    setFlipH(false);
+    setFlipV(false);
+    setStraightenAngle(0);
+    setCropRect({ x: 0, y: 0, w: 1, h: 1 });
   };
 
   // Execute full native crop & rotate preserving 100% original dimensions & quality
   const executeApply = () => {
     if (!activeLayer) return;
-    const img = new Image();
-    img.crossOrigin = 'anonymous';
-    img.onload = () => {
-      // 100% Real Native dimensions of the source image
-      const naturalW = img.naturalWidth || activeLayer.originalWidth || activeLayer.width;
-      const naturalH = img.naturalHeight || activeLayer.originalHeight || activeLayer.height;
+    setIsApplying(true);
 
-      const normRot = ((rotation % 360) + 360) % 360;
-      const totalDeg = normRot + straightenAngle;
-      const totalRad = (totalDeg * Math.PI) / 180;
+    const process = (img: HTMLImageElement) => {
+      try {
+        const naturalW = img.naturalWidth || activeLayer.originalWidth || activeLayer.width;
+        const naturalH = img.naturalHeight || activeLayer.originalHeight || activeLayer.height;
 
-      // 1. Calculate bounding box of rotated native image
-      const cos = Math.abs(Math.cos(totalRad));
-      const sin = Math.abs(Math.sin(totalRad));
-      const rotatedW = Math.round(naturalW * cos + naturalH * sin);
-      const rotatedH = Math.round(naturalW * sin + naturalH * cos);
+        const normRot = ((rotation % 360) + 360) % 360;
+        const totalDeg = normRot + straightenAngle;
+        const totalRad = (totalDeg * Math.PI) / 180;
 
-      // Create full native rotated canvas
-      const rotCanvas = document.createElement('canvas');
-      rotCanvas.width = rotatedW;
-      rotCanvas.height = rotatedH;
-      const rotCtx = rotCanvas.getContext('2d');
-      if (!rotCtx) return;
+        // 1. Calculate bounding box of rotated native image
+        const cos = Math.abs(Math.cos(totalRad));
+        const sin = Math.abs(Math.sin(totalRad));
+        const rotatedW = Math.round(naturalW * cos + naturalH * sin);
+        const rotatedH = Math.round(naturalW * sin + naturalH * cos);
 
-      rotCtx.imageSmoothingEnabled = true;
-      rotCtx.imageSmoothingQuality = 'high';
-      rotCtx.save();
-      rotCtx.translate(rotatedW / 2, rotatedH / 2);
-      rotCtx.rotate(totalRad);
-      rotCtx.scale(flipH ? -1 : 1, flipV ? -1 : 1);
-      rotCtx.drawImage(img, -naturalW / 2, -naturalH / 2, naturalW, naturalH);
-      rotCtx.restore();
+        // Full native rotated canvas
+        const rotCanvas = document.createElement('canvas');
+        rotCanvas.width = rotatedW;
+        rotCanvas.height = rotatedH;
+        const rotCtx = rotCanvas.getContext('2d');
+        if (!rotCtx) {
+          setIsApplying(false);
+          return;
+        }
 
-      // 2. Sample the crop region strictly from the full native rotated canvas
-      const cropPxX = Math.round(cropRect.x * rotatedW);
-      const cropPxY = Math.round(cropRect.y * rotatedH);
-      const cropPxW = Math.max(1, Math.min(rotatedW - cropPxX, Math.round(cropRect.w * rotatedW)));
-      const cropPxH = Math.max(1, Math.min(rotatedH - cropPxY, Math.round(cropRect.h * rotatedH)));
+        rotCtx.imageSmoothingEnabled = true;
+        rotCtx.imageSmoothingQuality = 'high';
+        rotCtx.save();
+        rotCtx.translate(rotatedW / 2, rotatedH / 2);
+        rotCtx.rotate(totalRad);
+        rotCtx.scale(flipH ? -1 : 1, flipV ? -1 : 1);
+        rotCtx.drawImage(img, -naturalW / 2, -naturalH / 2, naturalW, naturalH);
+        rotCtx.restore();
 
-      // 3. Create final cropped canvas at 100% full real pixel dimensions
-      const finalCanvas = document.createElement('canvas');
-      finalCanvas.width = cropPxW;
-      finalCanvas.height = cropPxH;
-      const finalCtx = finalCanvas.getContext('2d');
-      if (!finalCtx) return;
+        // 2. Sample the crop region strictly from full native rotated canvas
+        const isFullImage =
+          cropRect.x <= 0.005 &&
+          cropRect.y <= 0.005 &&
+          cropRect.w >= 0.995 &&
+          cropRect.h >= 0.995;
 
-      finalCtx.imageSmoothingEnabled = true;
-      finalCtx.imageSmoothingQuality = 'high';
-      finalCtx.drawImage(
-        rotCanvas,
-        cropPxX,
-        cropPxY,
-        cropPxW,
-        cropPxH,
-        0,
-        0,
-        cropPxW,
-        cropPxH
-      );
+        let finalCanvas: HTMLCanvasElement;
 
-      // 4. Preserve original format (PNG with transparency vs JPEG)
-      const isPng =
-        activeLayer.src.startsWith('data:image/png') ||
-        (activeLayer.name && activeLayer.name.toLowerCase().endsWith('.png'));
-      const mimeType = isPng ? 'image/png' : 'image/jpeg';
+        if (isFullImage) {
+          // If no cropping was made, use full rotated canvas directly (100% lossless!)
+          finalCanvas = rotCanvas;
+        } else {
+          const cropPxX = Math.max(0, Math.round(cropRect.x * rotatedW));
+          const cropPxY = Math.max(0, Math.round(cropRect.y * rotatedH));
+          const cropPxW = Math.max(1, Math.min(rotatedW - cropPxX, Math.round(cropRect.w * rotatedW)));
+          const cropPxH = Math.max(1, Math.min(rotatedH - cropPxY, Math.round(cropRect.h * rotatedH)));
 
-      onApplyCrop(finalCanvas, mimeType);
+          finalCanvas = document.createElement('canvas');
+          finalCanvas.width = cropPxW;
+          finalCanvas.height = cropPxH;
+          const finalCtx = finalCanvas.getContext('2d');
+          if (!finalCtx) {
+            setIsApplying(false);
+            return;
+          }
+
+          finalCtx.imageSmoothingEnabled = true;
+          finalCtx.imageSmoothingQuality = 'high';
+          finalCtx.drawImage(
+            rotCanvas,
+            cropPxX,
+            cropPxY,
+            cropPxW,
+            cropPxH,
+            0,
+            0,
+            cropPxW,
+            cropPxH
+          );
+        }
+
+        // Preserve format
+        const isPng =
+          activeLayer.src.startsWith('data:image/png') ||
+          (activeLayer.name && activeLayer.name.toLowerCase().endsWith('.png'));
+        const mimeType = isPng ? 'image/png' : 'image/jpeg';
+
+        onApplyCrop(finalCanvas, mimeType);
+      } catch (err) {
+        console.error('Crop execution error:', err);
+      } finally {
+        setIsApplying(false);
+      }
     };
-    img.src = activeLayer.src;
+
+    if (imageElementRef.current && imageElementRef.current.complete) {
+      process(imageElementRef.current);
+    } else {
+      const img = new Image();
+      if (!activeLayer.src.startsWith('data:')) {
+        img.crossOrigin = 'anonymous';
+      }
+      img.onload = () => process(img);
+      img.onerror = () => {
+        setIsApplying(false);
+      };
+      img.src = activeLayer.src;
+    }
   };
 
-  // Pointer drag logic for crop handles
-  const onPointerDown = (handle: string, e: React.PointerEvent) => {
-    e.preventDefault();
-    e.stopPropagation();
-    try {
-      (e.target as HTMLElement).setPointerCapture(e.pointerId);
-    } catch {}
+  // Robust window-level pointer drag handling for crop handles & move
+  const startDrag = (handle: string, clientX: number, clientY: number) => {
     isDraggingRef.current = {
       handle,
-      startX: e.clientX,
-      startY: e.clientY,
+      startX: clientX,
+      startY: clientY,
       startRect: { ...cropRect },
     };
-  };
 
-  const onPointerMove = (e: React.PointerEvent) => {
-    const { handle, startX, startY, startRect } = isDraggingRef.current;
-    if (!handle || !imageDisplayRef.current) return;
+    const handlePointerMove = (e: PointerEvent) => {
+      const { handle: curHandle, startX, startY, startRect } = isDraggingRef.current;
+      if (!curHandle || !previewCanvasRef.current) return;
 
-    const bounds = imageDisplayRef.current.getBoundingClientRect();
-    if (bounds.width <= 0 || bounds.height <= 0) return;
+      const bounds = previewCanvasRef.current.getBoundingClientRect();
+      if (bounds.width <= 0 || bounds.height <= 0) return;
 
-    const deltaX = (e.clientX - startX) / bounds.width;
-    const deltaY = (e.clientY - startY) / bounds.height;
+      const deltaX = (e.clientX - startX) / bounds.width;
+      const deltaY = (e.clientY - startY) / bounds.height;
 
-    let { x, y, w, h } = startRect;
+      let { x, y, w, h } = startRect;
 
-    if (handle === 'move') {
-      x = Math.max(0, Math.min(1 - w, x + deltaX));
-      y = Math.max(0, Math.min(1 - h, y + deltaY));
-    } else if (handle === 'nw') {
-      const newW = Math.max(0.08, Math.min(startRect.x + startRect.w, w - deltaX));
-      const newH = aspectRatio ? newW / aspectRatio : Math.max(0.08, Math.min(startRect.y + startRect.h, h - deltaY));
-      x = startRect.x + (w - newW);
-      y = startRect.y + (h - newH);
-      w = newW;
-      h = newH;
-    } else if (handle === 'ne') {
-      const newW = Math.max(0.08, Math.min(1 - startRect.x, w + deltaX));
-      const newH = aspectRatio ? newW / aspectRatio : Math.max(0.08, Math.min(startRect.y + startRect.h, h - deltaY));
-      y = startRect.y + (h - newH);
-      w = newW;
-      h = newH;
-    } else if (handle === 'se') {
-      const newW = Math.max(0.08, Math.min(1 - startRect.x, w + deltaX));
-      const newH = aspectRatio ? newW / aspectRatio : Math.max(0.08, Math.min(1 - startRect.y, h + deltaY));
-      w = newW;
-      h = newH;
-    } else if (handle === 'sw') {
-      const newW = Math.max(0.08, Math.min(startRect.x + startRect.w, w - deltaX));
-      const newH = aspectRatio ? newW / aspectRatio : Math.max(0.08, Math.min(1 - startRect.y, h + deltaY));
-      x = startRect.x + (w - newW);
-      w = newW;
-      h = newH;
-    }
+      if (curHandle === 'move') {
+        x = Math.max(0, Math.min(1 - w, x + deltaX));
+        y = Math.max(0, Math.min(1 - h, y + deltaY));
+      } else if (curHandle === 'nw') {
+        const newW = Math.max(0.05, Math.min(startRect.x + startRect.w, w - deltaX));
+        const newH = aspectRatio ? newW / aspectRatio : Math.max(0.05, Math.min(startRect.y + startRect.h, h - deltaY));
+        x = startRect.x + (w - newW);
+        y = startRect.y + (h - newH);
+        w = newW;
+        h = newH;
+      } else if (curHandle === 'ne') {
+        const newW = Math.max(0.05, Math.min(1 - startRect.x, w + deltaX));
+        const newH = aspectRatio ? newW / aspectRatio : Math.max(0.05, Math.min(startRect.y + startRect.h, h - deltaY));
+        y = startRect.y + (h - newH);
+        w = newW;
+        h = newH;
+      } else if (curHandle === 'se') {
+        const newW = Math.max(0.05, Math.min(1 - startRect.x, w + deltaX));
+        const newH = aspectRatio ? newW / aspectRatio : Math.max(0.05, Math.min(1 - startRect.y, h + deltaY));
+        w = newW;
+        h = newH;
+      } else if (curHandle === 'sw') {
+        const newW = Math.max(0.05, Math.min(startRect.x + startRect.w, w - deltaX));
+        const newH = aspectRatio ? newW / aspectRatio : Math.max(0.05, Math.min(1 - startRect.y, h + deltaY));
+        x = startRect.x + (w - newW);
+        w = newW;
+        h = newH;
+      } else if (curHandle === 'n') {
+        const newH = Math.max(0.05, Math.min(startRect.y + startRect.h, h - deltaY));
+        y = startRect.y + (h - newH);
+        h = newH;
+      } else if (curHandle === 's') {
+        h = Math.max(0.05, Math.min(1 - startRect.y, h + deltaY));
+      } else if (curHandle === 'w') {
+        const newW = Math.max(0.05, Math.min(startRect.x + startRect.w, w - deltaX));
+        x = startRect.x + (w - newW);
+        w = newW;
+      } else if (curHandle === 'e') {
+        w = Math.max(0.05, Math.min(1 - startRect.x, w + deltaX));
+      }
 
-    // Ensure within bounds
-    x = Math.max(0, Math.min(1 - w, x));
-    y = Math.max(0, Math.min(1 - h, y));
-    w = Math.min(1 - x, w);
-    h = Math.min(1 - y, h);
+      x = Math.max(0, Math.min(1 - w, x));
+      y = Math.max(0, Math.min(1 - h, y));
+      w = Math.min(1 - x, w);
+      h = Math.min(1 - y, h);
 
-    setCropRect({ x, y, w, h });
-  };
+      setCropRect({ x, y, w, h });
+    };
 
-  const onPointerUp = (e: React.PointerEvent) => {
-    if (isDraggingRef.current.handle) {
-      try {
-        (e.target as HTMLElement).releasePointerCapture(e.pointerId);
-      } catch {}
+    const handlePointerUp = () => {
       isDraggingRef.current.handle = null;
-    }
+      window.removeEventListener('pointermove', handlePointerMove);
+      window.removeEventListener('pointerup', handlePointerUp);
+      window.removeEventListener('pointercancel', handlePointerUp);
+    };
+
+    window.addEventListener('pointermove', handlePointerMove);
+    window.addEventListener('pointerup', handlePointerUp);
+    window.addEventListener('pointercancel', handlePointerUp);
   };
+
+  // Estimated output pixel dimensions
+  const normRot = ((rotation % 360) + 360) % 360;
+  const isQuarter = normRot === 90 || normRot === 270;
+  const curRotW = isQuarter ? originalHeight : originalWidth;
+  const curRotH = isQuarter ? originalWidth : originalHeight;
+  const outputW = Math.round(curRotW * cropRect.w);
+  const outputH = Math.round(curRotH * cropRect.h);
 
   return (
-    <div className="absolute inset-0 z-40 bg-slate-950/90 backdrop-blur-md flex flex-col items-center justify-between p-2 sm:p-3 select-none overflow-hidden font-sans">
-      {/* Top Toolbar: Aspect Ratios */}
-      <div className="w-full max-w-xl flex items-center justify-start sm:justify-center gap-1.5 overflow-x-auto py-1 sm:py-2 px-1 scrollbar-none shrink-0">
-        {aspectPresets.map((preset) => (
-          <button
-            key={preset.label}
-            onClick={() => handleSelectAspect(preset.value)}
-            className={`px-3 py-1.5 rounded-full text-xs font-semibold whitespace-nowrap transition active:scale-95 ${
-              aspectRatio === preset.value
-                ? 'bg-gradient-to-r from-indigo-500 to-purple-600 text-white shadow-md'
-                : 'bg-slate-800/80 text-slate-300 hover:text-white hover:bg-slate-700/80'
-            }`}
-          >
-            {preset.label}
-          </button>
-        ))}
+    <div className="fixed inset-0 z-50 bg-slate-950/98 backdrop-blur-md flex flex-col justify-between p-2 sm:p-4 select-none font-sans text-white touch-none">
+      {/* Top Toolbar: Aspect Ratios & Dimension pill */}
+      <div className="w-full max-w-2xl mx-auto flex items-center justify-between gap-2 overflow-x-auto py-1 px-1 scrollbar-none shrink-0">
+        <div className="flex items-center gap-1.5 overflow-x-auto scrollbar-none py-1">
+          {aspectPresets.map((preset) => (
+            <button
+              key={preset.label}
+              onClick={() => handleSelectAspect(preset.value)}
+              className={`px-3 py-1.5 rounded-full text-xs font-semibold whitespace-nowrap transition active:scale-95 ${
+                aspectRatio === preset.value
+                  ? 'bg-gradient-to-r from-indigo-500 to-purple-600 text-white shadow-md'
+                  : 'bg-slate-800 text-slate-300 hover:text-white hover:bg-slate-700'
+              }`}
+            >
+              {preset.label}
+            </button>
+          ))}
+        </div>
+
+        {/* Live Pixel Dimensions Indicator */}
+        <div className="hidden sm:flex items-center gap-1.5 px-3 py-1.5 rounded-full bg-slate-800/80 border border-slate-700/80 text-[11px] font-mono text-indigo-300 shrink-0">
+          <span>{outputW} × {outputH} px</span>
+          <span className="text-slate-400">
+            {cropRect.w >= 0.99 && cropRect.h >= 0.99 ? '(100% Gốc)' : '(Đã cắt)'}
+          </span>
+        </div>
       </div>
 
       {/* Center Crop Box Viewer */}
       <div
         ref={containerRef}
-        onPointerMove={onPointerMove}
-        onPointerUp={onPointerUp}
-        className="relative flex-1 min-h-0 w-full max-w-lg max-h-[50dvh] sm:max-h-[60dvh] flex items-center justify-center my-1 sm:my-2 overflow-hidden touch-none"
+        className="relative flex-1 min-h-0 w-full max-w-xl mx-auto flex items-center justify-center my-1 sm:my-2 overflow-hidden touch-none"
       >
-        {activeLayer && (
+        <div className="relative inline-flex items-center justify-center">
+          {/* Visual Rotated Canvas Preview */}
+          <canvas
+            ref={previewCanvasRef}
+            className="block rounded shadow-2xl pointer-events-none"
+          />
+
+          {/* Interactive Crop Grid & Handles Overlay matching Canvas exactly */}
           <div
-            ref={imageDisplayRef}
-            className="relative flex items-center justify-center transition-transform duration-75 max-w-full max-h-full"
             style={{
-              aspectRatio: `${baseAspect}`,
+              left: `${cropRect.x * 100}%`,
+              top: `${cropRect.y * 100}%`,
+              width: `${cropRect.w * 100}%`,
+              height: `${cropRect.h * 100}%`,
             }}
+            onPointerDown={(e) => {
+              e.preventDefault();
+              startDrag('move', e.clientX, e.clientY);
+            }}
+            className="absolute border-2 border-white/95 shadow-[0_0_0_9999px_rgba(0,0,0,0.75)] cursor-move touch-none z-10"
           >
-            {/* The rotated preview image filling the aspect box */}
-            <div
-              className="relative w-full h-full flex items-center justify-center overflow-hidden rounded-md shadow-2xl"
-              style={{
-                transform: `rotate(${rotation + straightenAngle}deg) scale(${flipH ? -1 : 1}, ${flipV ? -1 : 1})`,
-                transformOrigin: 'center center',
-              }}
-            >
-              <img
-                src={activeLayer.src}
-                alt="Ảnh đang cắt"
-                className="max-w-full max-h-full object-contain pointer-events-none"
-              />
+            {/* Rule of thirds grid lines */}
+            <div className="absolute inset-0 grid grid-cols-3 grid-rows-3 pointer-events-none opacity-40">
+              <div className="border-r border-b border-white" />
+              <div className="border-r border-b border-white" />
+              <div className="border-b border-white" />
+              <div className="border-r border-b border-white" />
+              <div className="border-r border-b border-white" />
+              <div className="border-b border-white" />
+              <div className="border-r border-b border-white" />
+              <div className="border-r border-b border-white" />
+              <div />
             </div>
 
-            {/* Crop Grid & Boundary Handles strictly over the image box */}
+            {/* Corner Handles (Large touch targets with sharp white brackets) */}
             <div
-              style={{
-                left: `${cropRect.x * 100}%`,
-                top: `${cropRect.y * 100}%`,
-                width: `${cropRect.w * 100}%`,
-                height: `${cropRect.h * 100}%`,
+              onPointerDown={(e) => {
+                e.stopPropagation();
+                e.preventDefault();
+                startDrag('nw', e.clientX, e.clientY);
               }}
-              onPointerDown={(e) => onPointerDown('move', e)}
-              className="absolute border-2 border-white/95 shadow-[0_0_0_9999px_rgba(0,0,0,0.72)] cursor-move touch-none z-10"
-            >
-              {/* Rule of thirds grid lines */}
-              <div className="absolute inset-0 grid grid-cols-3 grid-rows-3 pointer-events-none opacity-40">
-                <div className="border-r border-b border-white" />
-                <div className="border-r border-b border-white" />
-                <div className="border-b border-white" />
-                <div className="border-r border-b border-white" />
-                <div className="border-r border-b border-white" />
-                <div className="border-b border-white" />
-                <div className="border-r border-white" />
-                <div className="border-r border-white" />
-                <div />
-              </div>
+              className="absolute -top-3.5 -left-3.5 w-8 h-8 border-t-4 border-l-4 border-white cursor-nwse-resize bg-transparent z-20 touch-none active:scale-125 transition"
+            />
+            <div
+              onPointerDown={(e) => {
+                e.stopPropagation();
+                e.preventDefault();
+                startDrag('ne', e.clientX, e.clientY);
+              }}
+              className="absolute -top-3.5 -right-3.5 w-8 h-8 border-t-4 border-r-4 border-white cursor-nesw-resize bg-transparent z-20 touch-none active:scale-125 transition"
+            />
+            <div
+              onPointerDown={(e) => {
+                e.stopPropagation();
+                e.preventDefault();
+                startDrag('se', e.clientX, e.clientY);
+              }}
+              className="absolute -bottom-3.5 -right-3.5 w-8 h-8 border-b-4 border-r-4 border-white cursor-nwse-resize bg-transparent z-20 touch-none active:scale-125 transition"
+            />
+            <div
+              onPointerDown={(e) => {
+                e.stopPropagation();
+                e.preventDefault();
+                startDrag('sw', e.clientX, e.clientY);
+              }}
+              className="absolute -bottom-3.5 -left-3.5 w-8 h-8 border-b-4 border-l-4 border-white cursor-nesw-resize bg-transparent z-20 touch-none active:scale-125 transition"
+            />
 
-              {/* Corner Handles */}
-              <div
-                onPointerDown={(e) => onPointerDown('nw', e)}
-                className="absolute -top-3 -left-3 w-6 h-6 border-t-4 border-l-4 border-white cursor-nwse-resize bg-transparent z-20"
-              />
-              <div
-                onPointerDown={(e) => onPointerDown('ne', e)}
-                className="absolute -top-3 -right-3 w-6 h-6 border-t-4 border-r-4 border-white cursor-nesw-resize bg-transparent z-20"
-              />
-              <div
-                onPointerDown={(e) => onPointerDown('se', e)}
-                className="absolute -bottom-3 -right-3 w-6 h-6 border-b-4 border-r-4 border-white cursor-nwse-resize bg-transparent z-20"
-              />
-              <div
-                onPointerDown={(e) => onPointerDown('sw', e)}
-                className="absolute -bottom-3 -left-3 w-6 h-6 border-b-4 border-l-4 border-white cursor-nesw-resize bg-transparent z-20"
-              />
-            </div>
+            {/* Edge Midpoint Handles */}
+            <div
+              onPointerDown={(e) => {
+                e.stopPropagation();
+                e.preventDefault();
+                startDrag('n', e.clientX, e.clientY);
+              }}
+              className="absolute -top-2 left-1/2 -translate-x-1/2 w-8 h-4 border-t-4 border-white cursor-ns-resize bg-transparent z-20 touch-none"
+            />
+            <div
+              onPointerDown={(e) => {
+                e.stopPropagation();
+                e.preventDefault();
+                startDrag('s', e.clientX, e.clientY);
+              }}
+              className="absolute -bottom-2 left-1/2 -translate-x-1/2 w-8 h-4 border-b-4 border-white cursor-ns-resize bg-transparent z-20 touch-none"
+            />
+            <div
+              onPointerDown={(e) => {
+                e.stopPropagation();
+                e.preventDefault();
+                startDrag('w', e.clientX, e.clientY);
+              }}
+              className="absolute top-1/2 -left-2 -translate-y-1/2 w-4 h-8 border-l-4 border-white cursor-ew-resize bg-transparent z-20 touch-none"
+            />
+            <div
+              onPointerDown={(e) => {
+                e.stopPropagation();
+                e.preventDefault();
+                startDrag('e', e.clientX, e.clientY);
+              }}
+              className="absolute top-1/2 -right-2 -translate-y-1/2 w-4 h-8 border-r-4 border-white cursor-ew-resize bg-transparent z-20 touch-none"
+            />
           </div>
-        )}
+        </div>
       </div>
 
       {/* Bottom Controls: Rotate, Flip, Straighten & Confirm */}
-      <div className="w-full max-w-xl flex flex-col gap-2.5 py-2.5 px-3 bg-slate-900/95 rounded-2xl border border-slate-800 shadow-xl">
+      <div className="w-full max-w-2xl mx-auto flex flex-col gap-2.5 py-2.5 px-3 bg-slate-900/95 rounded-2xl border border-slate-800 shadow-2xl shrink-0">
         {/* Straighten angle slider */}
         <div className="flex items-center gap-3 px-1">
-          <span className="text-xs text-slate-400 whitespace-nowrap">Góc nghiêng:</span>
+          <span className="text-xs text-slate-400 whitespace-nowrap">Nghiêng:</span>
           <input
             type="range"
             min="-45"
@@ -341,42 +528,56 @@ export const CropOverlay: React.FC<CropOverlayProps> = ({ onApplyCrop, onCancel 
           />
           <button
             onClick={() => setStraightenAngle(0)}
-            className="text-xs font-mono text-indigo-400 w-8 text-right font-bold"
+            className="text-xs font-mono text-indigo-400 w-8 text-right font-bold hover:underline"
+            title="Đặt lại góc nghiêng về 0°"
           >
             {straightenAngle}°
           </button>
         </div>
 
         {/* Rotate & Flip Buttons & Action Buttons */}
-        <div className="flex items-center justify-between gap-2">
+        <div className="flex items-center justify-between gap-2 flex-wrap">
           <div className="flex items-center gap-1 sm:gap-1.5">
             <button
               onClick={() => handleRotate(-90)}
-              className="p-2 rounded-xl bg-slate-800 hover:bg-slate-700 text-slate-300 hover:text-white active:scale-95 transition"
+              className="flex items-center gap-1 px-2.5 py-2 rounded-xl bg-slate-800 hover:bg-slate-700 text-slate-200 text-xs font-semibold active:scale-95 transition"
               title="Xoay trái 90°"
             >
-              <RotateCcw className="w-4 h-4" />
+              <RotateCcw className="w-4 h-4 text-indigo-400" />
+              <span className="hidden xs:inline">-90°</span>
             </button>
             <button
               onClick={() => handleRotate(90)}
-              className="p-2 rounded-xl bg-slate-800 hover:bg-slate-700 text-slate-300 hover:text-white active:scale-95 transition"
+              className="flex items-center gap-1 px-2.5 py-2 rounded-xl bg-slate-800 hover:bg-slate-700 text-slate-200 text-xs font-semibold active:scale-95 transition"
               title="Xoay phải 90°"
             >
-              <RotateCw className="w-4 h-4" />
+              <RotateCw className="w-4 h-4 text-indigo-400" />
+              <span className="hidden xs:inline">+90°</span>
             </button>
             <button
               onClick={() => setFlipH((f) => !f)}
-              className={`p-2 rounded-xl transition active:scale-95 ${flipH ? 'bg-indigo-600 text-white' : 'bg-slate-800 text-slate-300 hover:bg-slate-700'}`}
-              title="Lật ngang (Flip Horizontal)"
+              className={`p-2 rounded-xl transition active:scale-95 ${
+                flipH ? 'bg-indigo-600 text-white' : 'bg-slate-800 text-slate-300 hover:bg-slate-700'
+              }`}
+              title="Lật ngang"
             >
               <FlipHorizontal className="w-4 h-4" />
             </button>
             <button
               onClick={() => setFlipV((f) => !f)}
-              className={`p-2 rounded-xl transition active:scale-95 ${flipV ? 'bg-indigo-600 text-white' : 'bg-slate-800 text-slate-300 hover:bg-slate-700'}`}
-              title="Lật dọc (Flip Vertical)"
+              className={`p-2 rounded-xl transition active:scale-95 ${
+                flipV ? 'bg-indigo-600 text-white' : 'bg-slate-800 text-slate-300 hover:bg-slate-700'
+              }`}
+              title="Lật dọc"
             >
               <FlipVertical className="w-4 h-4" />
+            </button>
+            <button
+              onClick={handleResetCrop}
+              className="p-2 rounded-xl bg-slate-800 hover:bg-slate-700 text-slate-400 hover:text-white transition active:scale-95"
+              title="Đặt lại khung cắt 100%"
+            >
+              <RefreshCw className="w-4 h-4" />
             </button>
           </div>
 
@@ -391,10 +592,11 @@ export const CropOverlay: React.FC<CropOverlayProps> = ({ onApplyCrop, onCancel 
             </button>
             <button
               onClick={executeApply}
-              className="flex items-center gap-1.5 px-4 py-2 rounded-xl bg-gradient-to-r from-indigo-500 to-purple-600 hover:from-indigo-600 hover:to-purple-700 text-white text-xs font-bold shadow-lg shadow-indigo-600/30 transition active:scale-95"
+              disabled={isApplying}
+              className="flex items-center gap-1.5 px-4 py-2 rounded-xl bg-gradient-to-r from-indigo-500 to-purple-600 hover:from-indigo-600 hover:to-purple-700 text-white text-xs font-bold shadow-lg shadow-indigo-600/30 transition active:scale-95 disabled:opacity-50"
             >
               <Check className="w-4 h-4" />
-              <span>Áp dụng cắt</span>
+              <span>{isApplying ? 'Đang cắt...' : 'Áp dụng cắt'}</span>
             </button>
           </div>
         </div>

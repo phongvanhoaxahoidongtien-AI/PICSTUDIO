@@ -10,9 +10,11 @@ import type {
   BeautySettings,
   CollageConfig,
   ProjectData,
+  TimeMarkConfig,
 } from '../types';
 import { DEFAULT_ADJUSTMENTS } from '../utils/imageProcessing';
 import { DEFAULT_BEAUTY_SETTINGS } from '../utils/beautyProcessing';
+import { DEFAULT_TIMEMARK_CONFIG } from '../utils/timemark';
 
 interface HistorySnapshot {
   layers: CanvasLayer[];
@@ -91,6 +93,10 @@ interface EditorState {
   // Collage tool state
   collageConfig: CollageConfig;
   setCollageConfig: (config: Partial<CollageConfig>) => void;
+
+  // TimeMark tool state
+  timeMarkConfig: TimeMarkConfig;
+  setTimeMarkConfig: (config: Partial<TimeMarkConfig> | ((prev: TimeMarkConfig) => TimeMarkConfig)) => void;
 
   // History (Undo / Redo)
   historyPast: HistorySnapshot[];
@@ -439,6 +445,15 @@ export const useEditorStore = create<EditorState>((set, get) => ({
   setCollageConfig: (config) =>
     set((state) => ({
       collageConfig: { ...state.collageConfig, ...config },
+    })),
+
+  timeMarkConfig: { ...DEFAULT_TIMEMARK_CONFIG },
+  setTimeMarkConfig: (configOrFn) =>
+    set((state) => ({
+      timeMarkConfig:
+        typeof configOrFn === 'function'
+          ? configOrFn(state.timeMarkConfig)
+          : { ...state.timeMarkConfig, ...configOrFn },
     })),
 
   historyPast: [],

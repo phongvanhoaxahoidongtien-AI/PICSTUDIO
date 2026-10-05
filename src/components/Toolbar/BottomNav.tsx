@@ -11,6 +11,7 @@ import {
   ImagePlus,
   Heart,
   Camera,
+  Clock,
 } from 'lucide-react';
 import { useEditorStore } from '../../stores/editorStore';
 import type { ToolType } from '../../types';
@@ -30,6 +31,7 @@ export const BottomNav: React.FC<BottomNavProps> = ({ onOpenFilePicker, onOpenCa
     { id: 'beauty', label: 'Làm đẹp', icon: <Heart className="w-5 h-5 text-pink-400" /> },
     { id: 'adjust', label: 'Chỉnh màu', icon: <Sliders className="w-5 h-5" /> },
     { id: 'filters', label: 'Bộ lọc', icon: <Sparkles className="w-5 h-5" /> },
+    { id: 'timemark', label: 'TimeMark', icon: <Clock className="w-5 h-5 text-amber-400" /> },
     { id: 'crop', label: 'Cắt / Xoay', icon: <Crop className="w-5 h-5" /> },
     { id: 'text', label: 'Chữ', icon: <Type className="w-5 h-5" /> },
     { id: 'collage', label: 'Ghép ảnh', icon: <LayoutGrid className="w-5 h-5" /> },

@@ -4,6 +4,7 @@ import {
   Eraser,
   Trash2,
   X,
+  Check,
   Undo2,
   Redo2,
   Sparkles,
@@ -37,6 +38,7 @@ export const DrawPanel: React.FC = () => {
     canvasWidth,
     canvasHeight,
     updateLayer,
+    removeLayer,
     setActiveTool,
     pushHistory,
     undo,
@@ -82,6 +84,120 @@ export const DrawPanel: React.FC = () => {
         updateLayer(l.id, { paths: [] });
       }
     });
+  };
+
+  // Merge/bake all drawings directly into base photo at 100% native resolution (NO LAYERS!)
+  const handleBakeDrawingsToPhoto = async () => {
+    const targetLayer = layers.find((l) => l.id === activeLayerId) || layers.find((l) => l.type === 'image');
+    if (!targetLayer || targetLayer.type !== 'image') {
+      setActiveTool('none');
+      return;
+    }
+    const imgLayer = targetLayer as ImageLayer;
+
+    const drawLayers = layers.filter((l) => l.type === 'drawing') as DrawingLayer[];
+    const hasStrokes = drawLayers.some((dl) => dl.paths && dl.paths.length > 0);
+    if (!hasStrokes) {
+      setActiveTool('none');
+      return;
+    }
+
+    pushHistory();
+    const naturalW = imgLayer.originalWidth || imgLayer.width || canvasWidth;
+    const naturalH = imgLayer.originalHeight || imgLayer.height || canvasHeight;
+
+    const canvas = document.createElement('canvas');
+    canvas.width = naturalW;
+    canvas.height = naturalH;
+    const ctx = canvas.getContext('2d');
+    if (!ctx) return;
+
+    // 1. Draw base photo
+    const img = new Image();
+    if (!imgLayer.src.startsWith('data:')) {
+      img.crossOrigin = 'anonymous';
+    }
+    await new Promise<void>((resolve, reject) => {
+      img.onload = () => resolve();
+      img.onerror = reject;
+      img.src = imgLayer.src;
+    });
+
+    ctx.imageSmoothingEnabled = true;
+    ctx.imageSmoothingQuality = 'high';
+    ctx.drawImage(img, 0, 0, naturalW, naturalH);
+
+    // 2. Scale factor from canvas space to natural photo space
+    const scaleX = naturalW / canvasWidth;
+    const scaleY = naturalH / canvasHeight;
+
+    // 3. Draw all drawing strokes onto base photo canvas at full natural resolution
+    for (const dLayer of drawLayers) {
+      if (!dLayer.visible || !dLayer.paths) continue;
+      for (const path of dLayer.paths) {
+        if (!path.points || path.points.length === 0) continue;
+        ctx.save();
+        ctx.lineCap = 'round';
+        ctx.lineJoin = 'round';
+
+        if (path.isEraser) {
+          ctx.globalCompositeOperation = 'destination-out';
+          ctx.strokeStyle = 'rgba(0,0,0,1)';
+          ctx.fillStyle = 'rgba(0,0,0,1)';
+        } else {
+          ctx.globalCompositeOperation = 'source-over';
+          ctx.strokeStyle = path.color;
+          ctx.fillStyle = path.color;
+        }
+
+        const size = Math.max(1, path.size * scaleX);
+        ctx.lineWidth = size;
+        ctx.globalAlpha = path.opacity ?? 1;
+
+        if (path.points.length === 1) {
+          ctx.beginPath();
+          ctx.arc(path.points[0].x * scaleX, path.points[0].y * scaleY, Math.max(1, size / 2), 0, Math.PI * 2);
+          ctx.fill();
+        } else {
+          ctx.beginPath();
+          ctx.arc(path.points[0].x * scaleX, path.points[0].y * scaleY, Math.max(1, size / 2), 0, Math.PI * 2);
+          ctx.fill();
+
+          ctx.beginPath();
+          ctx.moveTo(path.points[0].x * scaleX, path.points[0].y * scaleY);
+          for (let i = 1; i < path.points.length - 1; i++) {
+            const midX = ((path.points[i].x + path.points[i + 1].x) / 2) * scaleX;
+            const midY = ((path.points[i].y + path.points[i + 1].y) / 2) * scaleY;
+            ctx.quadraticCurveTo(path.points[i].x * scaleX, path.points[i].y * scaleY, midX, midY);
+          }
+          const lastPt = path.points[path.points.length - 1];
+          ctx.lineTo(lastPt.x * scaleX, lastPt.y * scaleY);
+          ctx.stroke();
+
+          ctx.beginPath();
+          ctx.arc(lastPt.x * scaleX, lastPt.y * scaleY, Math.max(1, size / 2), 0, Math.PI * 2);
+          ctx.fill();
+        }
+        ctx.restore();
+      }
+    }
+
+    const isPng = imgLayer.src.startsWith('data:image/png') || (imgLayer.name && imgLayer.name.endsWith('.png'));
+    const newSrc = canvas.toDataURL(isPng ? 'image/png' : 'image/jpeg', 0.98);
+
+    // Update base layer with new merged image
+    updateLayer(imgLayer.id, {
+      src: newSrc,
+      originalWidth: naturalW,
+      originalHeight: naturalH,
+    });
+
+    // Remove all drawing layers so NO separate layers remain!
+    for (const dLayer of drawLayers) {
+      removeLayer(dLayer.id);
+    }
+
+    setActiveTool('none');
   };
 
   // Execute AI Object Removal / Inpainting
@@ -479,6 +595,24 @@ export const DrawPanel: React.FC = () => {
             </div>
           </div>
         )}
+
+        {/* Action Bar: Apply directly to photo (No Layers!) */}
+        <div className="pt-2 border-t border-slate-800 flex items-center gap-2">
+          <button
+            onClick={handleBakeDrawingsToPhoto}
+            className="flex-1 flex items-center justify-center gap-1.5 py-2 px-3 rounded-xl bg-gradient-to-r from-indigo-500 to-purple-600 hover:from-indigo-600 hover:to-purple-700 text-white font-bold text-xs shadow-md transition active:scale-95"
+            title="Lưu nét vẽ vĩnh viễn vào ảnh gốc (Không dùng lớp)"
+          >
+            <Check className="w-4 h-4" />
+            <span>Lưu vào ảnh gốc (Không dùng lớp)</span>
+          </button>
+          <button
+            onClick={() => setActiveTool('none')}
+            className="py-2 px-3 rounded-xl bg-slate-800 hover:bg-slate-700 text-slate-300 text-xs font-semibold border border-slate-700 transition active:scale-95"
+          >
+            Đóng
+          </button>
+        </div>
       </div>
     </div>
   );
