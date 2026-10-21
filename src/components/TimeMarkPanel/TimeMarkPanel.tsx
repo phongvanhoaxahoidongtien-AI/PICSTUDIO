@@ -47,7 +47,7 @@ export const TimeMarkPanel: React.FC = () => {
 
   // Auto-fetch GPS location on first mount if address is default or empty
   useEffect(() => {
-    // Ensure enabled is true while panel is active
+    // Enable live preview while panel is actively open
     setTimeMarkConfig({ enabled: true });
 
     if (
@@ -57,6 +57,10 @@ export const TimeMarkPanel: React.FC = () => {
     ) {
       handleGetLocation();
     }
+
+    return () => {
+      setTimeMarkConfig({ enabled: false });
+    };
   }, []);
 
   const handleGetLocation = async () => {
@@ -144,7 +148,7 @@ export const TimeMarkPanel: React.FC = () => {
   ];
 
   return (
-    <div className="bg-slate-900/95 border-t border-slate-800 p-3 sm:p-4 shrink-0 max-h-[42dvh] sm:max-h-[46dvh] overflow-y-auto select-none backdrop-blur-md font-sans">
+    <div className="bg-slate-900/95 border-t lg:border-t-0 border-slate-800 p-3 sm:p-4 shrink-0 w-full h-full max-h-[46dvh] lg:max-h-none overflow-y-auto select-none backdrop-blur-md font-sans flex flex-col">
       {/* Top Header */}
       <div className="flex items-center justify-between mb-2.5">
         <div className="flex items-center gap-2">

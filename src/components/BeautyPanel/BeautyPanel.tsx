@@ -60,7 +60,7 @@ export const BeautyPanel: React.FC = () => {
   };
 
   return (
-    <div className="bg-slate-900/95 dark:bg-slate-950/95 backdrop-blur-md border-t border-slate-800 shrink-0 max-h-[35dvh] sm:max-h-[40dvh] flex flex-col z-20 shadow-2xl select-none animate-in slide-in-from-bottom duration-200">
+    <div className="bg-slate-900/95 dark:bg-slate-950/95 backdrop-blur-md border-t lg:border-t-0 border-slate-800 shrink-0 w-full h-full max-h-[44dvh] lg:max-h-none flex flex-col z-20 shadow-2xl select-none font-sans">
       {/* Top Header of Panel */}
       <div className="px-3 sm:px-4 py-2 border-b border-slate-800/80 flex items-center justify-between shrink-0">
         <div className="flex items-center gap-2">

@@ -46,12 +46,15 @@ export default function App() {
     activeLayerId,
     removeLayer,
     pushHistory,
+    setLayers,
   } = useEditorStore();
 
   const fileInputRef = useRef<HTMLInputElement>(null);
   const [isExportOpen, setIsExportOpen] = useState(false);
   const [isProjectsOpen, setIsProjectsOpen] = useState(false);
   const [isShareAppOpen, setIsShareAppOpen] = useState(false);
+  const [isDraggingFile, setIsDraggingFile] = useState(false);
+  const dragCounterRef = useRef(0);
 
   // File picker trigger
   const handleOpenFilePicker = () => {
@@ -145,21 +148,21 @@ export default function App() {
     }, 40);
   };
 
-  // Process imported image files (Main photo editing flow)
-  const handleFileChange = async (e: React.ChangeEvent<HTMLInputElement>) => {
-    const files = e.target.files;
+  // Core image file processor for File Picker, Drag & Drop, and Clipboard Paste
+  const processImageFiles = async (files: FileList | File[]) => {
     if (!files || files.length === 0) return;
 
     const isMultiLayerMode = activeTool === 'layers' || activeTool === 'collage';
 
     for (let i = 0; i < files.length; i++) {
       const file = files[i];
+      if (!file.type.startsWith('image/')) continue;
       try {
         const { dataUrl, width, height } = await downscaleImageIfNeeded(file);
         const cleanName = file.name.replace(/\.[^/.]+$/, '').trim();
 
         if (!isMultiLayerMode) {
-          // SINGLE IMAGE EDITING MODE (Default iOS / Android style):
+          // SINGLE IMAGE EDITING MODE (Default Gallery / Photos App style):
           // Canvas dimensions = 100% EXACT pixel dimensions of this photo
           // Discard previous layers so this is a clean single photo edit
           const newLayer: ImageLayer = {
@@ -246,6 +249,8 @@ export default function App() {
               exposure: 0,
               highlights: 0,
               shadows: 0,
+              whites: 0,
+              blacks: 0,
               temperature: 0,
               tint: 0,
               sharpness: 0,
@@ -261,6 +266,11 @@ export default function App() {
           };
 
           addLayer(newLayer);
+          useEditorStore.getState().setActiveLayerId(newLayer.id);
+
+          setTimeout(() => {
+            window.dispatchEvent(new CustomEvent('lumix:fit-to-screen'));
+          }, 40);
         }
       } catch (err) {
         console.error('Failed to import image:', err);
@@ -268,144 +278,83 @@ export default function App() {
     }
   };
 
-  // Drag and drop onto window
+  // Process imported image files from file picker
+  const handleFileChange = async (e: React.ChangeEvent<HTMLInputElement>) => {
+    const files = e.target.files;
+    if (files && files.length > 0) {
+      await processImageFiles(files);
+    }
+  };
+
+  // Full-window Drag and Drop handlers with visual overlay feedback
+  const handleDragEnter = (e: React.DragEvent) => {
+    e.preventDefault();
+    e.stopPropagation();
+    dragCounterRef.current += 1;
+    if (e.dataTransfer.items && e.dataTransfer.items.length > 0) {
+      setIsDraggingFile(true);
+    }
+  };
+
+  const handleDragLeave = (e: React.DragEvent) => {
+    e.preventDefault();
+    e.stopPropagation();
+    dragCounterRef.current -= 1;
+    if (dragCounterRef.current <= 0) {
+      dragCounterRef.current = 0;
+      setIsDraggingFile(false);
+    }
+  };
+
+  const handleDragOver = (e: React.DragEvent) => {
+    e.preventDefault();
+    e.stopPropagation();
+  };
+
+  const handleDrop = async (e: React.DragEvent) => {
+    e.preventDefault();
+    e.stopPropagation();
+    dragCounterRef.current = 0;
+    setIsDraggingFile(false);
+
+    const files = e.dataTransfer?.files;
+    if (files && files.length > 0) {
+      await processImageFiles(files);
+    }
+  };
+
+  // Clipboard Paste support (Ctrl+V / Cmd+V) on web
   useEffect(() => {
-    const handleDragOver = (e: DragEvent) => {
-      e.preventDefault();
-      e.stopPropagation();
-    };
-
-    const handleDrop = async (e: DragEvent) => {
-      e.preventDefault();
-      e.stopPropagation();
-      const files = e.dataTransfer?.files;
-      if (!files || files.length === 0) return;
-
-      const isMultiLayerMode = activeTool === 'layers' || activeTool === 'collage';
-
-      for (let i = 0; i < files.length; i++) {
-        const file = files[i];
-        if (!file.type.startsWith('image/')) continue;
-        try {
-          const { dataUrl, width, height } = await downscaleImageIfNeeded(file);
-          const cleanName = file.name.replace(/\.[^/.]+$/, '').trim();
-
-          if (!isMultiLayerMode) {
-            // Single Image Editing Mode
-            const newLayer: ImageLayer = {
-              id: 'img_' + Date.now() + '_' + i,
-              name: cleanName || 'Ảnh chỉnh sửa',
-              type: 'image',
-              visible: true,
-              locked: false,
-              opacity: 1,
-              blendMode: 'source-over',
-              src: dataUrl,
-              originalWidth: width,
-              originalHeight: height,
-              x: 0,
-              y: 0,
-              width: width,
-              height: height,
-              rotation: 0,
-              scaleX: 1,
-              scaleY: 1,
-              adjustments: {
-                brightness: 0,
-                contrast: 0,
-                saturation: 0,
-                exposure: 0,
-                highlights: 0,
-                shadows: 0,
-                temperature: 0,
-                tint: 0,
-                sharpness: 0,
-                vignette: 0,
-                clarity: 0,
-                blackPoint: 0,
-                gamma: 1.0,
-                whitePoint: 255,
-              },
-              beauty: { ...DEFAULT_BEAUTY_SETTINGS },
-              filterId: 'normal',
-              filterIntensity: 100,
-            };
-
-            setSingleImage(newLayer, width, height, cleanName || 'Ảnh chỉnh sửa');
-            setTimeout(() => {
-              window.dispatchEvent(new CustomEvent('lumix:fit-to-screen'));
-            }, 30);
-            break;
-          } else {
-            // Multi-layer mode
-            const curW = useEditorStore.getState().canvasWidth || width;
-            const curH = useEditorStore.getState().canvasHeight || height;
-            const layerX = Math.round((curW - width) / 2);
-            const layerY = Math.round((curH - height) / 2);
-
-            const newLayer: ImageLayer = {
-              id: 'img_' + Date.now() + '_' + i,
-              name: cleanName || `Lớp ảnh ${useEditorStore.getState().layers.length + 1}`,
-              type: 'image',
-              visible: true,
-              locked: false,
-              opacity: 1,
-              blendMode: 'source-over',
-              src: dataUrl,
-              originalWidth: width,
-              originalHeight: height,
-              x: layerX,
-              y: layerY,
-              width: width,
-              height: height,
-              rotation: 0,
-              scaleX: 1,
-              scaleY: 1,
-              adjustments: {
-                brightness: 0,
-                contrast: 0,
-                saturation: 0,
-                exposure: 0,
-                highlights: 0,
-                shadows: 0,
-                whites: 0,
-                blacks: 0,
-                temperature: 0,
-                tint: 0,
-                sharpness: 0,
-                vignette: 0,
-                clarity: 0,
-                blackPoint: 0,
-                gamma: 1.0,
-                whitePoint: 255,
-              },
-              beauty: { ...DEFAULT_BEAUTY_SETTINGS },
-              filterId: 'normal',
-              filterIntensity: 100,
-            };
-
-            addLayer(newLayer);
-            useEditorStore.getState().setActiveLayerId(newLayer.id);
-
-            setTimeout(() => {
-              window.dispatchEvent(new CustomEvent('lumix:fit-to-screen'));
-            }, 30);
-          }
-        } catch (err) {
-          console.error('Drop image failed:', err);
+    const handlePaste = async (e: ClipboardEvent) => {
+      const activeEl = document.activeElement as HTMLElement | null;
+      if (
+        activeEl &&
+        (activeEl.tagName === 'INPUT' ||
+          activeEl.tagName === 'TEXTAREA' ||
+          activeEl.isContentEditable)
+      ) {
+        return;
+      }
+      if (!e.clipboardData) return;
+      const items = e.clipboardData.items;
+      const imageFiles: File[] = [];
+      for (let i = 0; i < items.length; i++) {
+        if (items[i].type.startsWith('image/')) {
+          const file = items[i].getAsFile();
+          if (file) imageFiles.push(file);
         }
+      }
+      if (imageFiles.length > 0) {
+        e.preventDefault();
+        await processImageFiles(imageFiles);
       }
     };
 
-    window.addEventListener('dragover', handleDragOver);
-    window.addEventListener('drop', handleDrop);
-    return () => {
-      window.removeEventListener('dragover', handleDragOver);
-      window.removeEventListener('drop', handleDrop);
-    };
-  }, [setCanvasDimensions, addLayer]);
+    window.addEventListener('paste', handlePaste);
+    return () => window.removeEventListener('paste', handlePaste);
+  }, [activeTool, canvasWidth, canvasHeight]);
 
-  // Keyboard shortcuts (Undo, Redo, Delete, Escape)
+  // Keyboard shortcuts (Undo, Redo, Delete, Escape, Save, Open)
   useEffect(() => {
     const handleKeyDown = (e: KeyboardEvent) => {
       // Ignore if user is typing in input or textarea
@@ -423,6 +372,12 @@ export default function App() {
       } else if ((e.ctrlKey || e.metaKey) && e.key.toLowerCase() === 'y') {
         e.preventDefault();
         redo();
+      } else if ((e.ctrlKey || e.metaKey) && e.key.toLowerCase() === 's') {
+        e.preventDefault();
+        setIsExportOpen(true);
+      } else if ((e.ctrlKey || e.metaKey) && e.key.toLowerCase() === 'o') {
+        e.preventDefault();
+        handleOpenFilePicker();
       } else if (e.key === 'Escape') {
         setActiveTool('none');
       } else if ((e.key === 'Delete' || e.key === 'Backspace') && activeLayerId) {
@@ -435,26 +390,61 @@ export default function App() {
   }, [undo, redo, setActiveTool, activeLayerId, removeLayer]);
 
   // Apply Crop Callback (100% Native Resolution, No Quality Loss)
-  const handleApplyCrop = (croppedCanvas: HTMLCanvasElement, mimeType = 'image/jpeg') => {
-    const targetLayer = layers.find((l) => l.id === activeLayerId) || layers.find((l) => l.type === 'image');
-    if (!targetLayer) return;
-
+  const handleApplyCrop = (croppedCanvas: HTMLCanvasElement, mimeType = 'image/png') => {
     pushHistory();
     const newSrc = croppedCanvas.toDataURL(mimeType, 1.0);
-    updateLayer(targetLayer.id, {
+    const newW = croppedCanvas.width;
+    const newH = croppedCanvas.height;
+
+    // The cropped result is now the consolidated base image containing all baked edits
+    const existingImage = layers.find((l) => l.type === 'image') as ImageLayer | undefined;
+    const baseId = existingImage ? existingImage.id : 'img_' + Date.now();
+    const baseName = existingImage ? existingImage.name : 'Ảnh đã cắt';
+
+    const updatedImageLayer: ImageLayer = {
+      id: baseId,
+      name: baseName,
+      type: 'image',
+      visible: true,
+      locked: false,
+      opacity: 1,
+      blendMode: 'source-over',
       src: newSrc,
-      originalWidth: croppedCanvas.width,
-      originalHeight: croppedCanvas.height,
-      width: croppedCanvas.width,
-      height: croppedCanvas.height,
+      originalWidth: newW,
+      originalHeight: newH,
       x: 0,
       y: 0,
+      width: newW,
+      height: newH,
       rotation: 0,
       scaleX: 1,
       scaleY: 1,
-    });
-    // Set exact native dimensions for the cropped photo
-    setCanvasDimensions(croppedCanvas.width, croppedCanvas.height);
+      adjustments: {
+        brightness: 0,
+        contrast: 0,
+        saturation: 0,
+        exposure: 0,
+        highlights: 0,
+        shadows: 0,
+        whites: 0,
+        blacks: 0,
+        temperature: 0,
+        tint: 0,
+        sharpness: 0,
+        vignette: 0,
+        clarity: 0,
+        blackPoint: 0,
+        gamma: 1.0,
+        whitePoint: 255,
+      },
+      beauty: { ...DEFAULT_BEAUTY_SETTINGS },
+      filterId: 'normal',
+      filterIntensity: 100,
+    };
+
+    setLayers([updatedImageLayer]);
+    useEditorStore.getState().setActiveLayerId(baseId);
+    setCanvasDimensions(newW, newH);
     setActiveTool('none');
 
     setTimeout(() => {
@@ -463,7 +453,13 @@ export default function App() {
   };
 
   return (
-    <div className="fixed inset-0 w-full h-[100dvh] max-h-[100dvh] overflow-hidden flex flex-col bg-slate-950 text-slate-100 select-none font-sans">
+    <div
+      onDragEnter={handleDragEnter}
+      onDragLeave={handleDragLeave}
+      onDragOver={handleDragOver}
+      onDrop={handleDrop}
+      className="fixed inset-0 w-full h-[100dvh] max-h-[100dvh] overflow-hidden flex flex-col bg-slate-950 text-slate-100 select-none font-sans"
+    >
       {/* Hidden File Input for Single / Multi image import */}
       <input
         ref={fileInputRef}
@@ -482,39 +478,59 @@ export default function App() {
         onOpenShareApp={() => setIsShareAppOpen(true)}
       />
 
-      {/* Main Canvas Workspace with min-h-0 to allow flex shrinking on iOS */}
-      <main className="relative flex-1 min-h-0 w-full flex items-center justify-center overflow-hidden">
-        <CanvasEditor
-          onOpenFilePicker={handleOpenFilePicker}
-          onOpenCamera={() => setAppMode('camera')}
-          onOpenShareApp={() => setIsShareAppOpen(true)}
-        />
-
-        {/* Interactive Crop & Rotate Tool Overlay */}
-        {activeTool === 'crop' && (
-          <CropOverlay
-            onApplyCrop={handleApplyCrop}
-            onCancel={() => setActiveTool('none')}
+      {/* Workspace Area: Mobile bottom sheet vs Desktop right inspector sidebar */}
+      <div className="flex-1 min-h-0 w-full flex flex-col lg:flex-row overflow-hidden relative">
+        {/* Main Canvas Workspace with min-h-0 to allow flex shrinking on all screens */}
+        <main className="relative flex-1 min-h-0 min-w-0 w-full h-full flex items-center justify-center overflow-hidden">
+          <CanvasEditor
+            onOpenFilePicker={handleOpenFilePicker}
+            onOpenCamera={() => setAppMode('camera')}
+            onOpenShareApp={() => setIsShareAppOpen(true)}
           />
-        )}
-      </main>
 
-      {/* Active Specialized Editing Panels */}
-      {activeTool === 'beauty' && <BeautyPanel />}
-      {activeTool === 'adjust' && <AdjustmentsPanel />}
-      {activeTool === 'filters' && <FiltersPanel />}
-      {activeTool === 'timemark' && <TimeMarkPanel />}
-      {activeTool === 'text' && <TextPanel />}
-      {activeTool === 'collage' && <CollagePanel onAddMorePhotos={handleOpenFilePicker} />}
-      {activeTool === 'draw' && <DrawPanel />}
-      {activeTool === 'stickers' && <StickersPanel />}
-      {activeTool === 'layers' && <LayersPanel />}
+          {/* Interactive Crop & Rotate Tool Overlay */}
+          {activeTool === 'crop' && (
+            <CropOverlay
+              onApplyCrop={handleApplyCrop}
+              onCancel={() => setActiveTool('none')}
+            />
+          )}
+        </main>
+
+        {/* Active Specialized Editing Panels (Bottom Sheet on Mobile, Right Inspector Sidebar on Desktop Web) */}
+        {activeTool !== 'none' && activeTool !== 'crop' && (
+          <aside className="w-full lg:w-96 xl:w-[410px] lg:h-full shrink-0 z-20 flex flex-col overflow-hidden border-t lg:border-t-0 lg:border-l border-slate-800 bg-slate-900/95 dark:bg-slate-950/95 shadow-2xl animate-in lg:slide-in-from-right slide-in-from-bottom duration-200 max-h-[46dvh] lg:max-h-none">
+            {activeTool === 'beauty' && <BeautyPanel />}
+            {activeTool === 'adjust' && <AdjustmentsPanel />}
+            {activeTool === 'filters' && <FiltersPanel />}
+            {activeTool === 'timemark' && <TimeMarkPanel />}
+            {activeTool === 'text' && <TextPanel />}
+            {activeTool === 'collage' && <CollagePanel onAddMorePhotos={handleOpenFilePicker} />}
+            {activeTool === 'draw' && <DrawPanel />}
+            {activeTool === 'stickers' && <StickersPanel />}
+            {activeTool === 'layers' && <LayersPanel />}
+          </aside>
+        )}
+      </div>
 
       {/* Bottom Tool Bar */}
       <BottomNav
         onOpenFilePicker={handleOpenFilePicker}
         onOpenCamera={() => setAppMode('camera')}
       />
+
+      {/* Visual File Dropzone Overlay for Web Drag-and-Drop */}
+      {isDraggingFile && (
+        <div className="absolute inset-0 z-50 bg-slate-950/85 backdrop-blur-md flex flex-col items-center justify-center p-6 border-4 border-dashed border-indigo-500 m-3 rounded-3xl pointer-events-none animate-in fade-in duration-150">
+          <div className="p-5 rounded-3xl bg-indigo-600/20 text-indigo-400 mb-4 border border-indigo-500/30 shadow-xl shadow-indigo-600/20">
+            <svg className="w-14 h-14" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 16l4.586-4.586a2 2 0 012.828 0L16 16m-2-2l1.586-1.586a2 2 0 012.828 0L20 14m-6-6h.01M6 20h12a2 2 0 002-2V6a2 2 0 00-2-2H6a2 2 0 00-2 2v12a2 2 0 002 2z" />
+            </svg>
+          </div>
+          <h2 className="text-xl font-bold text-white mb-1">Thả ảnh vào đây để mở chỉnh sửa</h2>
+          <p className="text-sm text-slate-300">Chỉnh sửa trực tiếp trên ảnh gốc, bảo toàn 100% độ phân giải</p>
+        </div>
+      )}
 
       {/* Floating Offline Status Toast */}
       <OfflineIndicator />

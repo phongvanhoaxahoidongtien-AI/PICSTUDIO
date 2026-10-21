@@ -287,7 +287,7 @@ export const DrawPanel: React.FC = () => {
   };
 
   return (
-    <div className="bg-slate-900/95 border-t border-slate-800 p-3 sm:p-4 shrink-0 max-h-[38dvh] sm:max-h-[44dvh] overflow-y-auto select-none backdrop-blur-md">
+    <div className="bg-slate-900/95 border-t lg:border-t-0 border-slate-800 p-3 sm:p-4 shrink-0 w-full h-full max-h-[46dvh] lg:max-h-none overflow-y-auto select-none backdrop-blur-md flex flex-col font-sans">
       {/* Header */}
       <div className="flex items-center justify-between mb-3">
         <div className="flex items-center gap-2">
@@ -437,7 +437,7 @@ export const DrawPanel: React.FC = () => {
           </div>
         )}
 
-        {/* When Pen Eraser is active: Choose between Pixel Eraser and Stroke Eraser */}
+        {/* When Pen Eraser is active: Choose between Stroke Eraser and Precision Segment Eraser */}
         {isEraser && !isAiEraser && (
           <div className="p-2.5 rounded-2xl bg-rose-950/40 border border-rose-500/30 space-y-2">
             <div className="flex items-center justify-between text-xs px-1">
@@ -445,22 +445,12 @@ export const DrawPanel: React.FC = () => {
                 <Eraser className="w-3.5 h-3.5 text-rose-400" />
                 Kiểu tẩy nét vẽ:
               </span>
-              <span className="text-[11px] text-rose-300/80">
+              <span className="text-[11px] font-semibold text-rose-300">
                 {totalDrawPaths > 0 ? `${totalDrawPaths} nét vẽ trên ảnh` : 'Chưa có nét vẽ'}
               </span>
             </div>
 
             <div className="grid grid-cols-2 gap-2">
-              <button
-                onClick={() => setEraserMode('pixel')}
-                className={`py-1.5 px-2.5 rounded-xl text-xs font-semibold border text-center transition active:scale-95 ${
-                  eraserMode === 'pixel'
-                    ? 'bg-rose-600 border-rose-400 text-white shadow-sm'
-                    : 'bg-slate-800/80 border-slate-700 text-slate-300 hover:text-white'
-                }`}
-              >
-                Tẩy tự do (Pixel)
-              </button>
               <button
                 onClick={() => setEraserMode('stroke')}
                 className={`py-1.5 px-2.5 rounded-xl text-xs font-semibold border text-center transition active:scale-95 ${
@@ -469,15 +459,37 @@ export const DrawPanel: React.FC = () => {
                     : 'bg-slate-800/80 border-slate-700 text-slate-300 hover:text-white'
                 }`}
               >
-                Tẩy theo nét (Xóa nguyên nét)
+                Tẩy theo nét (Xóa nhanh)
+              </button>
+              <button
+                onClick={() => setEraserMode('pixel')}
+                className={`py-1.5 px-2.5 rounded-xl text-xs font-semibold border text-center transition active:scale-95 ${
+                  eraserMode === 'pixel'
+                    ? 'bg-rose-600 border-rose-400 text-white shadow-sm'
+                    : 'bg-slate-800/80 border-slate-700 text-slate-300 hover:text-white'
+                }`}
+              >
+                Tẩy cắt đoạn (Chính xác)
               </button>
             </div>
 
-            <p className="text-[11px] text-rose-200/90 leading-relaxed px-1">
-              {eraserMode === 'pixel'
-                ? '💡 Kéo đầu tẩy trên ảnh để cạo xóa chính xác từng điểm theo kích thước đầu tẩy. Ảnh gốc 100% nguyên vẹn.'
-                : '💡 Chạm hoặc quét ngón tay qua bất kỳ nét vẽ nào để xóa ngay toàn bộ nét đó ngay lập tức.'}
-            </p>
+            {totalDrawPaths === 0 ? (
+              <div className="p-2 rounded-xl bg-amber-950/40 border border-amber-500/30 flex items-center justify-between gap-2 text-[11px] text-amber-200">
+                <span>Chưa có nét bút nào. Muốn xóa chi tiết trên ảnh gốc?</span>
+                <button
+                  onClick={() => setIsAiEraser(true)}
+                  className="px-2 py-1 rounded-lg bg-amber-500 text-slate-950 font-bold hover:bg-amber-400 shrink-0"
+                >
+                  Dùng Tẩy AI
+                </button>
+              </div>
+            ) : (
+              <p className="text-[11px] text-rose-200/90 leading-relaxed px-1">
+                {eraserMode === 'stroke'
+                  ? '💡 Chạm hoặc quét ngón tay qua nét vẽ để xóa ngay toàn bộ nét đó ngay lập tức.'
+                  : '💡 Di chuyển đầu tẩy để cắt ngắn hoặc xóa chính xác đoạn nét vẽ bạn muốn.'}
+              </p>
+            )}
           </div>
         )}
 
@@ -600,11 +612,11 @@ export const DrawPanel: React.FC = () => {
         <div className="pt-2 border-t border-slate-800 flex items-center gap-2">
           <button
             onClick={handleBakeDrawingsToPhoto}
-            className="flex-1 flex items-center justify-center gap-1.5 py-2 px-3 rounded-xl bg-gradient-to-r from-indigo-500 to-purple-600 hover:from-indigo-600 hover:to-purple-700 text-white font-bold text-xs shadow-md transition active:scale-95"
-            title="Lưu nét vẽ vĩnh viễn vào ảnh gốc (Không dùng lớp)"
+            className="flex-1 flex items-center justify-center gap-1.5 py-2 px-3 rounded-xl bg-gradient-to-r from-indigo-500 to-purple-600 hover:from-indigo-600 hover:to-purple-700 text-white font-bold text-xs shadow-md shadow-indigo-600/30 transition active:scale-95"
+            title="Lưu tất cả nét vẽ vĩnh viễn vào ảnh gốc để có thể cắt, xoay hoặc chỉnh sửa tiếp theo"
           >
             <Check className="w-4 h-4" />
-            <span>Lưu vào ảnh gốc (Không dùng lớp)</span>
+            <span>Tạm lưu nét vẽ vào ảnh {totalDrawPaths > 0 ? `(${totalDrawPaths})` : ''}</span>
           </button>
           <button
             onClick={() => setActiveTool('none')}

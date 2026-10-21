@@ -5,7 +5,7 @@
 import type { TimeMarkConfig, TimeMarkTemplateId, TimeMarkPosition } from '../types';
 
 export const DEFAULT_TIMEMARK_CONFIG: TimeMarkConfig = {
-  enabled: true,
+  enabled: false, // OFF by default - only enabled when user explicitly chooses TimeMark
   templateId: 'attendance',
   position: 'bottom-left',
   showDate: true,

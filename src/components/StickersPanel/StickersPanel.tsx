@@ -1,11 +1,11 @@
 import React, { useState } from 'react';
-import { Smile, X, Flame, Sparkles, Share2, ShoppingBag, Video, MessageCircle, Award, Frame, Shapes, Search } from 'lucide-react';
+import { Smile, X, Flame, Sparkles, Share2, ShoppingBag, Video, MessageCircle, Award, Frame, Shapes, Search, Check } from 'lucide-react';
 import { useEditorStore } from '../../stores/editorStore';
 import { OFFLINE_STICKERS, type StickerItem } from '../../utils/stickers';
-import type { StickerLayer } from '../../types';
+import type { StickerLayer, ImageLayer } from '../../types';
 
 export const StickersPanel: React.FC = () => {
-  const { addLayer, canvasWidth, canvasHeight, setActiveTool, pushHistory } = useEditorStore();
+  const { layers, updateLayer, removeLayer, addLayer, canvasWidth, canvasHeight, setActiveTool, pushHistory } = useEditorStore();
   const [selectedCategory, setSelectedCategory] = useState<string>('trending');
   const [searchQuery, setSearchQuery] = useState('');
 
@@ -58,8 +58,96 @@ export const StickersPanel: React.FC = () => {
     addLayer(newLayer);
   };
 
+  // Bake / Flatten all sticker layers directly onto base photo canvas (Tạm lưu sticker vào ảnh)
+  const handleBakeAllStickersToPhoto = async () => {
+    const baseLayer = layers.find((l) => l.type === 'image') as ImageLayer | undefined;
+    const stickerLayers = layers.filter((l) => l.type === 'sticker') as StickerLayer[];
+    if (!baseLayer || stickerLayers.length === 0) {
+      setActiveTool('none');
+      return;
+    }
+
+    pushHistory();
+    const naturalW = baseLayer.originalWidth || baseLayer.width || canvasWidth;
+    const naturalH = baseLayer.originalHeight || baseLayer.height || canvasHeight;
+
+    const canvas = document.createElement('canvas');
+    canvas.width = naturalW;
+    canvas.height = naturalH;
+    const ctx = canvas.getContext('2d');
+    if (!ctx) return;
+
+    const img = new Image();
+    if (!baseLayer.src.startsWith('data:')) {
+      img.crossOrigin = 'anonymous';
+    }
+    await new Promise<void>((resolve, reject) => {
+      img.onload = () => resolve();
+      img.onerror = reject;
+      img.src = baseLayer.src;
+    });
+
+    ctx.imageSmoothingEnabled = true;
+    ctx.imageSmoothingQuality = 'high';
+    ctx.drawImage(img, 0, 0, naturalW, naturalH);
+
+    const scaleX = naturalW / canvasWidth;
+    const scaleY = naturalH / canvasHeight;
+
+    for (const sl of stickerLayers) {
+      if (!sl.svgContent) continue;
+      try {
+        const svgDataUrl = `data:image/svg+xml;utf8,${encodeURIComponent(sl.svgContent)}`;
+        const sImg = new Image();
+        await new Promise<void>((resolve, reject) => {
+          sImg.onload = () => resolve();
+          sImg.onerror = reject;
+          sImg.src = svgDataUrl;
+        });
+
+        ctx.save();
+        const centerX = (sl.x + (sl.width * sl.scaleX) / 2) * scaleX;
+        const centerY = (sl.y + (sl.height * sl.scaleY) / 2) * scaleY;
+        const sw = sl.width * sl.scaleX * scaleX;
+        const sh = sl.height * sl.scaleY * scaleY;
+
+        ctx.translate(centerX, centerY);
+        if (sl.rotation) {
+          ctx.rotate((sl.rotation * Math.PI) / 180);
+        }
+        ctx.globalAlpha = sl.opacity ?? 1;
+        ctx.drawImage(sImg, -sw / 2, -sh / 2, sw, sh);
+        ctx.restore();
+      } catch (err) {
+        console.error('Failed to bake sticker:', err);
+      }
+    }
+
+    const isPng = baseLayer.src.startsWith('data:image/png') || (baseLayer.name && baseLayer.name.endsWith('.png'));
+    const newSrc = canvas.toDataURL(isPng ? 'image/png' : 'image/jpeg', 0.98);
+
+    updateLayer(baseLayer.id, {
+      src: newSrc,
+      originalWidth: naturalW,
+      originalHeight: naturalH,
+    });
+
+    for (const sl of stickerLayers) {
+      removeLayer(sl.id);
+    }
+    useEditorStore.getState().setActiveLayerId(baseLayer.id);
+
+    setActiveTool('none');
+
+    setTimeout(() => {
+      window.dispatchEvent(new CustomEvent('lumix:fit-to-screen'));
+    }, 40);
+  };
+
+  const stickerLayerCount = layers.filter((l) => l.type === 'sticker').length;
+
   return (
-    <div className="bg-slate-900/95 border-t border-slate-800 p-3 sm:p-4 shrink-0 max-h-[35dvh] sm:max-h-[40dvh] overflow-y-auto select-none backdrop-blur-md">
+    <div className="bg-slate-900/95 border-t lg:border-t-0 border-slate-800 p-3 sm:p-4 shrink-0 w-full h-full max-h-[44dvh] lg:max-h-none overflow-y-auto select-none backdrop-blur-md flex flex-col font-sans">
       {/* Header */}
       <div className="flex items-center justify-between mb-3">
         <div className="flex items-center gap-2">
@@ -145,6 +233,26 @@ export const StickersPanel: React.FC = () => {
               </span>
             </button>
           ))}
+        </div>
+      )}
+
+      {/* Persistent Bottom Action Bar for Quick Bake / Flatten / Commit */}
+      {stickerLayerCount > 0 && (
+        <div className="mt-4 pt-3 border-t border-slate-800 flex items-center gap-2">
+          <button
+            onClick={handleBakeAllStickersToPhoto}
+            className="flex-1 flex items-center justify-center gap-1.5 py-2.5 px-3 rounded-xl bg-gradient-to-r from-indigo-500 to-purple-600 hover:from-indigo-600 hover:to-purple-700 text-white font-bold text-xs shadow-md shadow-indigo-600/30 transition active:scale-95"
+            title="Lưu tất cả sticker vĩnh viễn vào ảnh gốc để có thể cắt, xoay hoặc chỉnh sửa tiếp theo"
+          >
+            <Check className="w-4 h-4" />
+            <span>Tạm lưu sticker vào ảnh ({stickerLayerCount})</span>
+          </button>
+          <button
+            onClick={() => setActiveTool('none')}
+            className="py-2.5 px-4 rounded-xl bg-slate-800 hover:bg-slate-700 text-slate-300 text-xs font-semibold border border-slate-700 transition active:scale-95"
+          >
+            Đóng
+          </button>
         </div>
       )}
     </div>

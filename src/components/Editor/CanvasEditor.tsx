@@ -16,6 +16,8 @@ import {
   X,
   Maximize2,
   Share2,
+  Eye,
+  RotateCcw,
 } from 'lucide-react';
 import { useEditorStore } from '../../stores/editorStore';
 import type {
@@ -61,6 +63,7 @@ export const CanvasEditor: React.FC<CanvasEditorProps> = ({
     pan,
     setPan,
     isBeforeAfterActive,
+    setIsBeforeAfterActive,
     activeTool,
     setActiveTool,
     brushColor,
@@ -132,6 +135,7 @@ export const CanvasEditor: React.FC<CanvasEditorProps> = ({
 
   // Drawing state
   const isDrawingRef = useRef(false);
+  const hasErasedRef = useRef(false);
   const currentDrawPointsRef = useRef<DrawPoint[]>([]);
   const activeDrawingLayerIdRef = useRef<string | null>(null);
   const [cursorPos, setCursorPos] = useState<{ x: number; y: number; visible: boolean }>({
@@ -369,9 +373,9 @@ export const CanvasEditor: React.FC<CanvasEditorProps> = ({
       ctx.restore();
     }
 
-    // 5. Live preview of TimeMark watermark badge when tool is active or enabled
-    if (activeTool === 'timemark' || timeMarkConfig?.enabled) {
-      drawTimeMarkWatermark(ctx, canvasWidth, canvasHeight, timeMarkConfig);
+    // 5. Live preview of TimeMark watermark badge ONLY when user is using timemark tool
+    if (activeTool === 'timemark') {
+      drawTimeMarkWatermark(ctx, canvasWidth, canvasHeight, { ...timeMarkConfig, enabled: true });
     }
   }, [
     layers,
@@ -576,11 +580,13 @@ export const CanvasEditor: React.FC<CanvasEditorProps> = ({
   };
 
   // Erase entire stroke when clicked or swept over in 'stroke' eraser mode
-  const eraseStrokeAt = (cx: number, cy: number, hitRadius: number) => {
+  const eraseStrokeAt = (cx: number, cy: number) => {
     const currentLayers = useEditorStore.getState().layers;
-    let modified = false;
+    let anyModified = false;
+    // Comfortable hit radius in screen pixels (minimum 24px) converted to canvas coordinates
+    const screenRadius = Math.max(20, (brushSize * zoom) / 2);
+    const canvasHitRadius = screenRadius / Math.max(0.001, zoom);
 
-    // Check all unlocked drawing layers from top to bottom
     for (let lIndex = currentLayers.length - 1; lIndex >= 0; lIndex--) {
       const layer = currentLayers[lIndex];
       if (layer.type !== 'drawing' || layer.locked) continue;
@@ -592,10 +598,11 @@ export const CanvasEditor: React.FC<CanvasEditorProps> = ({
 
       for (const p of drawLayer.paths) {
         let isHit = false;
-        const effectiveRadius = hitRadius + p.size / 2;
+        const effectiveRadius = canvasHitRadius + p.size / 2;
 
-        if (p.points.length === 1) {
-          if (Math.hypot(cx - p.points[0].x, cy - p.points[0].y) <= effectiveRadius) {
+        if (p.points.length <= 1) {
+          const pt = p.points[0];
+          if (pt && Math.hypot(cx - pt.x, cy - pt.y) <= effectiveRadius) {
             isHit = true;
           }
         } else {
@@ -610,7 +617,7 @@ export const CanvasEditor: React.FC<CanvasEditorProps> = ({
 
         if (isHit) {
           layerModified = true;
-          modified = true;
+          anyModified = true;
         } else {
           remainingPaths.push(p);
         }
@@ -620,7 +627,77 @@ export const CanvasEditor: React.FC<CanvasEditorProps> = ({
         updateLayer(drawLayer.id, { paths: remainingPaths });
       }
     }
-    return modified;
+    return anyModified;
+  };
+
+  // Erase and cut stroke segments directly under eraser (Precision/Segment Eraser)
+  const eraseSegmentAt = (cx: number, cy: number) => {
+    const currentLayers = useEditorStore.getState().layers;
+    let anyModified = false;
+    // Eraser radius in canvas space
+    const eraserRadius = Math.max(brushSize / 2, 8 / Math.max(0.001, zoom));
+
+    for (let lIndex = currentLayers.length - 1; lIndex >= 0; lIndex--) {
+      const layer = currentLayers[lIndex];
+      if (layer.type !== 'drawing' || layer.locked) continue;
+      const drawLayer = layer as DrawingLayer;
+      if (!drawLayer.paths || drawLayer.paths.length === 0) continue;
+
+      const newPaths: DrawPath[] = [];
+      let layerModified = false;
+
+      for (const p of drawLayer.paths) {
+        if (!p.points || p.points.length === 0) continue;
+
+        const isPtInside = (pt: DrawPoint) => Math.hypot(pt.x - cx, pt.y - cy) <= eraserRadius + p.size / 4;
+
+        let hasPointInside = false;
+        for (let i = 0; i < p.points.length; i++) {
+          if (isPtInside(p.points[i])) {
+            hasPointInside = true;
+            break;
+          }
+        }
+
+        if (!hasPointInside && p.points.length > 1) {
+          for (let i = 0; i < p.points.length - 1; i++) {
+            if (distToSegment(cx, cy, p.points[i].x, p.points[i].y, p.points[i + 1].x, p.points[i + 1].y) <= eraserRadius) {
+              hasPointInside = true;
+              break;
+            }
+          }
+        }
+
+        if (!hasPointInside) {
+          newPaths.push(p);
+          continue;
+        }
+
+        layerModified = true;
+        anyModified = true;
+
+        // Split points into segments that fall outside the eraser circle
+        let currentSeg: DrawPoint[] = [];
+        for (const pt of p.points) {
+          if (isPtInside(pt)) {
+            if (currentSeg.length > 0) {
+              newPaths.push({ ...p, points: currentSeg });
+              currentSeg = [];
+            }
+          } else {
+            currentSeg.push(pt);
+          }
+        }
+        if (currentSeg.length > 0) {
+          newPaths.push({ ...p, points: currentSeg });
+        }
+      }
+
+      if (layerModified) {
+        updateLayer(drawLayer.id, { paths: newPaths });
+      }
+    }
+    return anyModified;
   };
 
   // Pointer interactions
@@ -639,17 +716,18 @@ export const CanvasEditor: React.FC<CanvasEditorProps> = ({
         return;
       }
 
-      // If in Stroke Eraser mode: Erase any stroke directly touched
-      if (isEraser && eraserMode === 'stroke') {
+      // If in Eraser mode (Stroke or Precision Segment)
+      if (isEraser) {
         isDrawingRef.current = true;
-        const hit = eraseStrokeAt(x, y, Math.max(16, brushSize / 2));
+        hasErasedRef.current = false;
+        const hit = eraserMode === 'stroke' ? eraseStrokeAt(x, y) : eraseSegmentAt(x, y);
         if (hit) {
-          pushHistory();
+          hasErasedRef.current = true;
         }
         return;
       }
 
-      // Freehand drawing or Pixel Eraser (destination-out)
+      // Freehand drawing with brush
       isDrawingRef.current = true;
       currentDrawPointsRef.current = [{ x, y }];
 
@@ -658,7 +736,7 @@ export const CanvasEditor: React.FC<CanvasEditorProps> = ({
         color: brushColor,
         size: brushSize,
         opacity: brushOpacity,
-        isEraser,
+        isEraser: false,
       };
 
       // Always read latest layers from Zustand store to prevent stale React closure bugs
@@ -747,9 +825,12 @@ export const CanvasEditor: React.FC<CanvasEditorProps> = ({
           return;
         }
 
-        if (isEraser && eraserMode === 'stroke') {
-          // Sweep erase strokes under finger/cursor
-          eraseStrokeAt(x, y, Math.max(16, brushSize / 2));
+        // Real-time responsive stroke or precision segment erasing
+        if (isEraser) {
+          const hit = eraserMode === 'stroke' ? eraseStrokeAt(x, y) : eraseSegmentAt(x, y);
+          if (hit) {
+            hasErasedRef.current = true;
+          }
           return;
         }
 
@@ -854,8 +935,11 @@ export const CanvasEditor: React.FC<CanvasEditorProps> = ({
     if (isDrawingRef.current) {
       isDrawingRef.current = false;
       if (!isAiEraser) {
-        pushHistory();
+        if (!isEraser || hasErasedRef.current) {
+          pushHistory();
+        }
       }
+      hasErasedRef.current = false;
     }
     if (isDraggingLayer) {
       setIsDraggingLayer(false);
@@ -865,11 +949,32 @@ export const CanvasEditor: React.FC<CanvasEditorProps> = ({
     isPanningRef.current = false;
   };
 
-  // Wheel zoom
+  // Desktop Web: Mouse wheel zoom & Trackpad pinch anchored on mouse pointer
   const handleWheel = (e: React.WheelEvent) => {
-    e.preventDefault();
-    const zoomFactor = e.deltaY < 0 ? 1.08 : 0.92;
-    setZoom((z) => Math.min(4, Math.max(0.2, z * zoomFactor)));
+    if (!containerRef.current) return;
+    const rect = containerRef.current.getBoundingClientRect();
+    const mouseX = e.clientX - rect.left;
+    const mouseY = e.clientY - rect.top;
+
+    const zoomFactor = e.deltaY < 0 ? 1.12 : 0.89;
+
+    setZoom((prevZoom) => {
+      const nextZoom = Math.max(0.04, Math.min(12.0, Number((prevZoom * zoomFactor).toFixed(4))));
+      const scaleChange = nextZoom / prevZoom;
+
+      setPan((prevPan) => {
+        const centerX = rect.width / 2 + prevPan.x;
+        const centerY = rect.height / 2 + prevPan.y;
+        const dx = mouseX - centerX;
+        const dy = mouseY - centerY;
+        return {
+          x: Math.round(prevPan.x - dx * (scaleChange - 1)),
+          y: Math.round(prevPan.y - dy * (scaleChange - 1)),
+        };
+      });
+
+      return nextZoom;
+    });
   };
 
   // Touch pinch gesture handler
@@ -1431,26 +1536,80 @@ export const CanvasEditor: React.FC<CanvasEditorProps> = ({
         </div>
       )}
 
-      {/* Floating Zoom Indicator & Quick Fit Pill */}
+      {/* Floating Canvas Controls Toolbar (Desktop & Mobile Web) */}
       {hasLayers && (
-        <button
-          onClick={() => {
-            if (Math.abs(zoom - 1) < 0.05) {
-              window.dispatchEvent(new CustomEvent('lumix:fit-to-screen'));
-            } else {
-              setZoom(1);
-              setPan({ x: 0, y: 0 });
-            }
-          }}
-          className="absolute bottom-3 right-3 z-20 flex items-center gap-1.5 px-2.5 py-1 rounded-full bg-slate-900/85 hover:bg-slate-800 backdrop-blur-md border border-slate-700/60 text-slate-300 hover:text-white text-[11px] font-mono shadow-xl transition active:scale-95"
-          title="Chạm để chuyển đổi giữa Vừa màn hình (Fit) và 100% Gốc"
-        >
-          <span className="w-1.5 h-1.5 rounded-full bg-indigo-400" />
-          <span>{Math.round(zoom * 100)}%</span>
-          <span className="text-[10px] text-slate-400 font-sans hidden xs:inline">
-            {Math.abs(zoom - 1) < 0.05 ? 'Gốc 1:1' : 'Vừa khít'}
-          </span>
-        </button>
+        <div className="absolute bottom-3 right-3 z-20 flex items-center gap-1.5 p-1 rounded-2xl bg-slate-900/90 hover:bg-slate-900 backdrop-blur-md border border-slate-700/80 shadow-2xl shadow-black/50 select-none">
+          {/* Native Photo Dimensions Badge */}
+          <div className="hidden sm:flex items-center gap-1 px-2.5 py-1 rounded-xl bg-slate-800/80 text-[11px] font-mono text-slate-300 border border-slate-700/50">
+            <span>{canvasWidth} × {canvasHeight} px</span>
+          </div>
+
+          <div className="hidden sm:block w-[1px] h-4 bg-slate-700/60 mx-0.5" />
+
+          {/* Quick Before/After Comparison Button */}
+          <button
+            onMouseDown={() => setIsBeforeAfterActive(true)}
+            onMouseUp={() => setIsBeforeAfterActive(false)}
+            onMouseLeave={() => setIsBeforeAfterActive(false)}
+            onTouchStart={() => setIsBeforeAfterActive(true)}
+            onTouchEnd={() => setIsBeforeAfterActive(false)}
+            className={`flex items-center gap-1 px-2 py-1 rounded-xl text-xs font-semibold transition active:scale-95 ${
+              isBeforeAfterActive
+                ? 'bg-amber-500 text-slate-950 font-bold'
+                : 'text-slate-300 hover:text-white hover:bg-slate-800'
+            }`}
+            title="Nhấn giữ để so sánh với ảnh gốc"
+          >
+            <Eye className="w-3.5 h-3.5" />
+            <span className="text-[11px] hidden xs:inline">Gốc</span>
+          </button>
+
+          <div className="w-[1px] h-4 bg-slate-700/60 mx-0.5" />
+
+          {/* Zoom Out Button */}
+          <button
+            onClick={() => setZoom((z) => Math.max(0.04, Number((z * 0.85).toFixed(3))))}
+            className="w-7 h-7 flex items-center justify-center rounded-xl text-slate-300 hover:text-white hover:bg-slate-800 active:scale-90 transition"
+            title="Thu nhỏ (Zoom out)"
+          >
+            <Minus className="w-3.5 h-3.5" />
+          </button>
+
+          {/* Zoom % Pill (Click to toggle 100% vs Fit) */}
+          <button
+            onClick={() => {
+              if (Math.abs(zoom - 1) < 0.05) {
+                window.dispatchEvent(new CustomEvent('lumix:fit-to-screen'));
+              } else {
+                setZoom(1);
+                setPan({ x: 0, y: 0 });
+              }
+            }}
+            className="px-2 py-1 rounded-xl bg-slate-800/90 hover:bg-slate-750 text-slate-200 hover:text-white text-[11px] font-mono font-medium transition active:scale-95 flex items-center gap-1"
+            title="Nhấn để đổi giữa 100% kích thước thật và vừa màn hình"
+          >
+            <span className="w-1.5 h-1.5 rounded-full bg-indigo-400" />
+            <span>{Math.round(zoom * 100)}%</span>
+          </button>
+
+          {/* Zoom In Button */}
+          <button
+            onClick={() => setZoom((z) => Math.min(12, Number((z * 1.15).toFixed(3))))}
+            className="w-7 h-7 flex items-center justify-center rounded-xl text-slate-300 hover:text-white hover:bg-slate-800 active:scale-90 transition"
+            title="Phóng to (Zoom in)"
+          >
+            <Plus className="w-3.5 h-3.5" />
+          </button>
+
+          {/* Fit to Screen Button */}
+          <button
+            onClick={() => window.dispatchEvent(new CustomEvent('lumix:fit-to-screen'))}
+            className="w-7 h-7 flex items-center justify-center rounded-xl text-slate-300 hover:text-white hover:bg-slate-800 active:scale-90 transition"
+            title="Vừa khít màn hình (Fit to screen)"
+          >
+            <Maximize2 className="w-3.5 h-3.5" />
+          </button>
+        </div>
       )}
     </div>
   );

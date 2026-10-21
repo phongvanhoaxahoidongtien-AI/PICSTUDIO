@@ -11,9 +11,10 @@ import {
   Palette,
   Sparkles,
   X,
+  Check,
 } from 'lucide-react';
 import { useEditorStore } from '../../stores/editorStore';
-import type { TextLayer } from '../../types';
+import type { TextLayer, ImageLayer } from '../../types';
 
 export const TextPanel: React.FC = () => {
   const {
@@ -21,6 +22,8 @@ export const TextPanel: React.FC = () => {
     activeLayerId,
     addLayer,
     updateActiveText,
+    updateLayer,
+    removeLayer,
     canvasWidth,
     canvasHeight,
     setActiveTool,
@@ -84,8 +87,129 @@ export const TextPanel: React.FC = () => {
     addLayer(newText);
   };
 
+  // Bake / Flatten all text layers directly onto base photo canvas (Tạm lưu chữ vào ảnh)
+  const handleBakeAllTextToPhoto = async () => {
+    const baseLayer = layers.find((l) => l.type === 'image') as ImageLayer | undefined;
+    const textLayers = layers.filter((l) => l.type === 'text') as TextLayer[];
+    if (!baseLayer || textLayers.length === 0) {
+      setActiveTool('none');
+      return;
+    }
+
+    pushHistory();
+    const naturalW = baseLayer.originalWidth || baseLayer.width || canvasWidth;
+    const naturalH = baseLayer.originalHeight || baseLayer.height || canvasHeight;
+
+    const canvas = document.createElement('canvas');
+    canvas.width = naturalW;
+    canvas.height = naturalH;
+    const ctx = canvas.getContext('2d');
+    if (!ctx) return;
+
+    const img = new Image();
+    if (!baseLayer.src.startsWith('data:')) {
+      img.crossOrigin = 'anonymous';
+    }
+    await new Promise<void>((resolve, reject) => {
+      img.onload = () => resolve();
+      img.onerror = reject;
+      img.src = baseLayer.src;
+    });
+
+    ctx.imageSmoothingEnabled = true;
+    ctx.imageSmoothingQuality = 'high';
+    ctx.drawImage(img, 0, 0, naturalW, naturalH);
+
+    // Scale text coordinates to natural photo dimensions
+    const scaleX = naturalW / canvasWidth;
+    const scaleY = naturalH / canvasHeight;
+
+    for (const tl of textLayers) {
+      ctx.save();
+      const textCenterX = (tl.x + (tl.width * tl.scaleX) / 2) * scaleX;
+      const textCenterY = (tl.y + (tl.height * tl.scaleY) / 2) * scaleY;
+
+      ctx.translate(textCenterX, textCenterY);
+      ctx.rotate((tl.rotation * Math.PI) / 180);
+
+      const scaledFontSize = Math.round(tl.fontSize * scaleX * tl.scaleX);
+      const isItalic = tl.fontStyle === 'italic';
+      const isBold = tl.fontWeight === 'bold' || tl.fontWeight === '900';
+      ctx.font = `${isItalic ? 'italic ' : ''}${isBold ? 'bold ' : ''}${scaledFontSize}px "${tl.fontFamily || 'Plus Jakarta Sans'}", sans-serif`;
+      ctx.textAlign = (tl.textAlign as CanvasTextAlign) || 'center';
+      ctx.textBaseline = 'middle';
+
+      if (tl.shadowColor) {
+        ctx.shadowColor = tl.shadowColor;
+        ctx.shadowBlur = (tl.shadowBlur || 4) * scaleX;
+        ctx.shadowOffsetX = (tl.shadowOffsetX || 0) * scaleX;
+        ctx.shadowOffsetY = (tl.shadowOffsetY || 0) * scaleY;
+      }
+
+      // Support multiline text
+      const lines = tl.text.split('\n');
+      const lineHeight = scaledFontSize * 1.25;
+      const totalH = lines.length * lineHeight;
+      const startY = -totalH / 2 + lineHeight / 2;
+
+      // Background box if set
+      if (tl.backgroundColor && tl.backgroundColor !== 'transparent') {
+        const pad = (tl.backgroundPadding || 8) * scaleX;
+        const radius = (tl.backgroundRadius || 6) * scaleX;
+        ctx.fillStyle = tl.backgroundColor;
+        const lw = tl.width * scaleX * tl.scaleX;
+        const lh = tl.height * scaleY * tl.scaleY;
+        ctx.beginPath();
+        if (typeof ctx.roundRect === 'function') {
+          ctx.roundRect(-lw / 2 - pad, -lh / 2 - pad, lw + pad * 2, lh + pad * 2, radius);
+        } else {
+          ctx.rect(-lw / 2 - pad, -lh / 2 - pad, lw + pad * 2, lh + pad * 2);
+        }
+        ctx.fill();
+      }
+
+      lines.forEach((line, idx) => {
+        const yPos = startY + idx * lineHeight;
+        let xPos = 0;
+        if (tl.textAlign === 'left') xPos = (-tl.width * scaleX * tl.scaleX) / 2;
+        else if (tl.textAlign === 'right') xPos = (tl.width * scaleX * tl.scaleX) / 2;
+
+        if (tl.stroke && tl.stroke !== 'transparent' && (tl.strokeWidth || 0) > 0) {
+          ctx.strokeStyle = tl.stroke;
+          ctx.lineWidth = (tl.strokeWidth || 1) * scaleX;
+          ctx.strokeText(line, xPos, yPos);
+        }
+
+        ctx.fillStyle = tl.fill || '#ffffff';
+        ctx.fillText(line, xPos, yPos);
+      });
+
+      ctx.restore();
+    }
+
+    const isPng = baseLayer.src.startsWith('data:image/png') || (baseLayer.name && baseLayer.name.endsWith('.png'));
+    const newSrc = canvas.toDataURL(isPng ? 'image/png' : 'image/jpeg', 0.98);
+
+    updateLayer(baseLayer.id, {
+      src: newSrc,
+      originalWidth: naturalW,
+      originalHeight: naturalH,
+    });
+
+    for (const tl of textLayers) {
+      removeLayer(tl.id);
+    }
+    useEditorStore.getState().setActiveLayerId(baseLayer.id);
+
+    setActiveTool('none');
+
+    setTimeout(() => {
+      window.dispatchEvent(new CustomEvent('lumix:fit-to-screen'));
+    }, 40);
+  };
+
   return (
-    <div className="bg-slate-900/95 border-t border-slate-800 p-3 sm:p-4 shrink-0 max-h-[35dvh] sm:max-h-[40dvh] overflow-y-auto select-none backdrop-blur-md">
+    <div className="bg-slate-900/95 border-t lg:border-t-0 border-slate-800 p-3 sm:p-4 shrink-0 w-full h-full max-h-[44dvh] lg:max-h-none overflow-y-auto select-none backdrop-blur-md flex flex-col font-sans">
       {/* Header */}
       <div className="flex items-center justify-between mb-3">
         <div className="flex items-center gap-2">
@@ -93,12 +217,22 @@ export const TextPanel: React.FC = () => {
           <h3 className="text-xs font-bold text-white uppercase tracking-wider">Thêm & Sửa Chữ</h3>
         </div>
         <div className="flex items-center gap-2">
+          {layers.some((l) => l.type === 'text') && (
+            <button
+              onClick={handleBakeAllTextToPhoto}
+              className="flex items-center gap-1.5 px-2.5 py-1.5 rounded-xl bg-gradient-to-r from-emerald-600 to-teal-600 hover:from-emerald-500 hover:to-teal-500 text-white text-xs font-bold shadow-md shadow-emerald-600/20 active:scale-95 transition"
+              title="Tạm lưu tất cả chữ vào ảnh gốc để có thể cắt xoay hoặc chỉnh sửa tiếp theo"
+            >
+              <Check className="w-3.5 h-3.5 stroke-[2.5]" />
+              <span className="hidden xs:inline">Tạm lưu vào ảnh</span>
+            </button>
+          )}
           <button
             onClick={handleAddText}
-            className="flex items-center gap-1 px-3 py-1.5 rounded-xl bg-indigo-600 hover:bg-indigo-500 text-white text-xs font-bold shadow-md shadow-indigo-600/20 active:scale-95 transition"
+            className="flex items-center gap-1 px-2.5 py-1.5 rounded-xl bg-indigo-600 hover:bg-indigo-500 text-white text-xs font-bold shadow-md shadow-indigo-600/20 active:scale-95 transition"
           >
             <Plus className="w-3.5 h-3.5" />
-            <span>Thêm chữ mới</span>
+            <span className="hidden xs:inline">Thêm mới</span>
           </button>
           <button
             onClick={() => setActiveTool('none')}
@@ -383,6 +517,33 @@ export const TextPanel: React.FC = () => {
           </div>
         </div>
       )}
+
+      {/* Persistent Bottom Action Bar for Quick Bake / Flatten / Commit */}
+      <div className="mt-4 pt-3 border-t border-slate-800 flex items-center gap-2">
+        {layers.some((l) => l.type === 'text') && (
+          <button
+            onClick={handleBakeAllTextToPhoto}
+            className="flex-1 flex items-center justify-center gap-1.5 py-2 px-3 rounded-xl bg-gradient-to-r from-indigo-500 to-purple-600 hover:from-indigo-600 hover:to-purple-700 text-white font-bold text-xs shadow-md shadow-indigo-600/30 transition active:scale-95"
+            title="Lưu tất cả chữ vĩnh viễn vào ảnh gốc để có thể cắt, xoay hoặc chỉnh sửa tiếp theo"
+          >
+            <Check className="w-4 h-4" />
+            <span>Tạm lưu chữ vào ảnh ({layers.filter((l) => l.type === 'text').length})</span>
+          </button>
+        )}
+        <button
+          onClick={handleAddText}
+          className="flex items-center justify-center gap-1 py-2 px-3 rounded-xl bg-slate-800 hover:bg-slate-700 text-indigo-300 font-semibold text-xs border border-slate-700 transition active:scale-95"
+        >
+          <Plus className="w-4 h-4" />
+          <span>Thêm chữ</span>
+        </button>
+        <button
+          onClick={() => setActiveTool('none')}
+          className="py-2 px-3 rounded-xl bg-slate-800 hover:bg-slate-700 text-slate-300 text-xs font-semibold border border-slate-700 transition active:scale-95"
+        >
+          Đóng
+        </button>
+      </div>
     </div>
   );
 };

@@ -128,7 +128,7 @@ export const AdjustmentsPanel: React.FC = () => {
   };
 
   return (
-    <div className="bg-slate-900/95 border-t border-slate-800 p-3 sm:p-4 shrink-0 max-h-[35dvh] sm:max-h-[40dvh] overflow-y-auto select-none backdrop-blur-md">
+    <div className="bg-slate-900/95 border-t lg:border-t-0 border-slate-800 p-3 sm:p-4 shrink-0 w-full h-full max-h-[44dvh] lg:max-h-none overflow-y-auto select-none backdrop-blur-md flex flex-col font-sans">
       {/* Top Header of Panel */}
       <div className="flex items-center justify-between mb-3">
         <div className="flex items-center gap-2">
